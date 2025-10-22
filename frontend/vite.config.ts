@@ -3,12 +3,21 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      // Optimize React plugin performance
+      babel: {
+        plugins: [],
+      },
+    }),
+  ],
   build: {
     // Optimize build performance
     target: 'es2022',
     minify: 'esbuild',
     sourcemap: false,
+    // Improve build speed
+    reportCompressedSize: false,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -29,5 +38,10 @@ export default defineConfig({
   // Optimize deps to prevent hanging
   optimizeDeps: {
     include: ['react', 'react-dom', 'antd', '@mui/material'],
+    force: false, // Don't force re-optimization
+  },
+  // Disable type checking in build (use separate type-check script)
+  esbuild: {
+    logOverride: { 'this-is-undefined-in-esm': 'silent' },
   },
 })

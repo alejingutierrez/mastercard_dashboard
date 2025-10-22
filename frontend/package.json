@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run type-check && vite build",
-    "build:force": "vite build",
-    "type-check": "tsc -b --force",
+    "build": "vite build",
+    "build:with-types": "npm run type-check && vite build",
+    "type-check": "tsc -b",
     "type-check:watch": "tsc -b --watch",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
