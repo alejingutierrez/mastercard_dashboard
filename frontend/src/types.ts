@@ -101,6 +101,47 @@ export interface ActivityResponse {
   };
 }
 
+export interface ConversionFunnelEntry {
+  weekStart: string;
+  weekEnd: string | null;
+  loginUsers: number;
+  awardRequests: number;
+  redemptionUsers: number;
+  loginEvents: number;
+  awardEvents: number;
+  redemptionEvents: number;
+  requestRate: number | null;
+  approvalRate: number | null;
+  conversionRate: number | null;
+}
+
+export interface ConversionFunnelResponse {
+  scope: "campaign" | "consolidated";
+  campaigns: Pick<Campaign, "id" | "name">[];
+  series: ConversionFunnelEntry[];
+  totals: {
+    loginUsers: number;
+    awardRequests: number;
+    redemptionUsers: number;
+    loginEvents: number;
+    awardEvents: number;
+    redemptionEvents: number;
+  };
+  metadata: {
+    appliedFilters: {
+      dateRange: { from: string; to: string } | null;
+      loginType: string | null;
+      userId: string | null;
+      userIp: string | null;
+    };
+    sources: {
+      logins: string;
+      awards: string;
+      redemptions: string;
+    };
+  };
+}
+
 export interface RedemptionAmountDistributionEntry {
   amount: number;
   redemptions: number;

@@ -221,6 +221,7 @@ const applyFiltersToSql = ({
     mc_logins: { hasIdmask: true, hasIp: true, hasType: true },
     mc_redemptions: { hasIdmask: true, hasIp: true, hasType: false },
     mc_users: { hasIdmask: true, hasIp: false, hasType: false },
+    mc_awards_logs: { hasIdmask: true, hasIp: false, hasType: false },
   };
   const tableCapabilities = baseTableName ? capabilities[baseTableName] || {} : {};
 
@@ -2104,6 +2105,150 @@ const computeMovingAverage = (points, sourceKey, targetKey, windowSize = MOVING_
   });
 };
 
+const buildWeeklyLoginFunnelQuery = ({ range }) => {
+  const conditions = [
+    "l.idmask IS NOT NULL",
+    `l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "l.date IS NOT NULL",
+  ];
+  const params = [];
+
+  if (range) {
+    conditions.push("l.date BETWEEN %s AND %s");
+    params.push(range.from, range.to);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const sql = `
+    SELECT
+      DATE_FORMAT(DATE_SUB(l.date, INTERVAL WEEKDAY(l.date) DAY), '%Y-%m-%d') AS week_start,
+      DATE_FORMAT(
+        DATE_ADD(DATE_SUB(l.date, INTERVAL WEEKDAY(l.date) DAY), INTERVAL 6 DAY),
+        '%Y-%m-%d'
+      ) AS week_end,
+      COUNT(DISTINCT l.idmask) AS unique_users,
+      COUNT(*) AS total_events
+    FROM {db}.mc_logins l
+    ${whereClause}
+    GROUP BY week_start, week_end
+    ORDER BY week_start ASC;
+  `;
+
+  return { sql, params };
+};
+
+const buildWeeklyAwardFunnelQuery = ({ range }) => {
+  const conditions = [
+    "al.idmask IS NOT NULL",
+    `al.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "al.date IS NOT NULL",
+  ];
+  const params = [];
+
+  if (range) {
+    conditions.push("al.date BETWEEN %s AND %s");
+    params.push(range.from, range.to);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const sql = `
+    SELECT
+      DATE_FORMAT(DATE_SUB(al.date, INTERVAL WEEKDAY(al.date) DAY), '%Y-%m-%d') AS week_start,
+      DATE_FORMAT(
+        DATE_ADD(DATE_SUB(al.date, INTERVAL WEEKDAY(al.date) DAY), INTERVAL 6 DAY),
+        '%Y-%m-%d'
+      ) AS week_end,
+      COUNT(DISTINCT al.idmask) AS unique_users,
+      COUNT(*) AS total_events
+    FROM {db}.mc_awards_logs al
+    ${whereClause}
+    GROUP BY week_start, week_end
+    ORDER BY week_start ASC;
+  `;
+
+  return { sql, params };
+};
+
+const buildWeeklyRedemptionFunnelQuery = ({ range }) => {
+  const conditions = [
+    "r.idmask IS NOT NULL",
+    `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.date IS NOT NULL",
+  ];
+  const params = [];
+
+  if (range) {
+    conditions.push("r.date BETWEEN %s AND %s");
+    params.push(range.from, range.to);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const sql = `
+    SELECT
+      DATE_FORMAT(DATE_SUB(r.date, INTERVAL WEEKDAY(r.date) DAY), '%Y-%m-%d') AS week_start,
+      DATE_FORMAT(
+        DATE_ADD(DATE_SUB(r.date, INTERVAL WEEKDAY(r.date) DAY), INTERVAL 6 DAY),
+        '%Y-%m-%d'
+      ) AS week_end,
+      COUNT(DISTINCT r.idmask) AS unique_users,
+      COUNT(*) AS total_events
+    FROM {db}.mc_redemptions r
+    ${whereClause}
+    GROUP BY week_start, week_end
+    ORDER BY week_start ASC;
+  `;
+
+  return { sql, params };
+};
+
+const mergeFunnelStageRows = (aggregateMap, rows, stage) => {
+  for (const row of rows || []) {
+    const weekStart = row.week_start;
+    if (!weekStart) {
+      continue;
+    }
+
+    const existing = aggregateMap.get(weekStart) || {
+      weekStart,
+      weekEnd: row.week_end ?? null,
+      loginUsers: 0,
+      awardRequests: 0,
+      redemptionUsers: 0,
+      loginEvents: 0,
+      awardEvents: 0,
+      redemptionEvents: 0,
+    };
+
+    if (!existing.weekEnd && row.week_end) {
+      existing.weekEnd = row.week_end;
+    }
+
+    const uniqueUsersRaw =
+      row.unique_users ?? row.uniqueUsers ?? row.total_unique ?? row.users ?? 0;
+    const totalEventsRaw =
+      row.total_events ?? row.totalEvents ?? row.events ?? row.count ?? 0;
+
+    const uniqueUsers = Number(uniqueUsersRaw) || 0;
+    const totalEvents = Number(totalEventsRaw) || 0;
+
+    if (stage === "login") {
+      existing.loginUsers += uniqueUsers;
+      existing.loginEvents += totalEvents;
+    } else if (stage === "awards") {
+      existing.awardRequests += uniqueUsers;
+      existing.awardEvents += totalEvents;
+    } else if (stage === "redemptions") {
+      existing.redemptionUsers += uniqueUsers;
+      existing.redemptionEvents += totalEvents;
+    }
+
+    aggregateMap.set(weekStart, existing);
+  }
+};
+
 router.get("/:id/activity", async (req, res) => {
   const rawCampaignId = req.params.id;
   const range = parseDateRange(req.query);
@@ -2373,6 +2518,161 @@ router.get("/:id/activity", async (req, res) => {
     console.error("[activity] Error", error);
     res.status(500).json({
       error: "No se pudo obtener la actividad temporal",
+      detail: error.message,
+    });
+  }
+});
+
+router.get("/:id/conversion-funnel", async (req, res) => {
+  const rawCampaignId = req.params.id;
+  const range = parseDateRange(req.query);
+  const loginType = normalizeSelectorValue(req.query.loginType);
+  const userId = normalizeSelectorValue(req.query.userId);
+  const userIp = normalizeSelectorValue(req.query.userIp);
+  const filters = { loginType, userId, userIp };
+
+  const allowedCampaigns = req.allowedCampaigns;
+  const allowedIdsSet = req.allowedCampaignIdsSet;
+
+  if (rawCampaignId !== "all" && !allowedIdsSet.has(rawCampaignId)) {
+    return res.status(403).json({ error: "No tienes acceso a esta campaña." });
+  }
+
+  const selectedCampaigns =
+    rawCampaignId === "all"
+      ? allowedCampaigns
+      : (() => {
+          const campaign = allowedCampaigns.find(({ id }) => id === rawCampaignId);
+          if (!campaign) {
+            return null;
+          }
+          return [campaign];
+        })();
+
+  if (!selectedCampaigns) {
+    return res.status(404).json({ error: "Campaña no encontrada" });
+  }
+
+  try {
+    const aggregateMap = new Map();
+    const totals = {
+      loginUsers: 0,
+      awardRequests: 0,
+      redemptionUsers: 0,
+      loginEvents: 0,
+      awardEvents: 0,
+      redemptionEvents: 0,
+    };
+
+    for (const campaign of selectedCampaigns) {
+      const loginQuery = buildWeeklyLoginFunnelQuery({ range });
+      const awardsQuery = buildWeeklyAwardFunnelQuery({ range });
+      const redemptionsQuery = buildWeeklyRedemptionFunnelQuery({ range });
+
+      const loginDefinition = applyFiltersToSql({
+        sql: loginQuery.sql,
+        params: loginQuery.params,
+        database: campaign.database,
+        baseTable: "mc_logins",
+        filters,
+        range,
+      });
+
+      const awardsDefinition = applyFiltersToSql({
+        sql: awardsQuery.sql,
+        params: awardsQuery.params,
+        database: campaign.database,
+        baseTable: "mc_awards_logs",
+        filters,
+        range,
+      });
+
+      const redemptionsDefinition = applyFiltersToSql({
+        sql: redemptionsQuery.sql,
+        params: redemptionsQuery.params,
+        database: campaign.database,
+        baseTable: "mc_redemptions",
+        filters,
+        range,
+      });
+
+      const [loginResult, awardsResult, redemptionsResult] = await Promise.all([
+        runQuery(campaign.database, loginDefinition.sql, loginDefinition.params),
+        runQuery(campaign.database, awardsDefinition.sql, awardsDefinition.params),
+        runQuery(campaign.database, redemptionsDefinition.sql, redemptionsDefinition.params),
+      ]);
+
+      mergeFunnelStageRows(aggregateMap, loginResult.rows, "login");
+      mergeFunnelStageRows(aggregateMap, awardsResult.rows, "awards");
+      mergeFunnelStageRows(aggregateMap, redemptionsResult.rows, "redemptions");
+    }
+
+    const weeks = Array.from(aggregateMap.keys()).sort();
+    const series = weeks.map((weekStart) => {
+      const entry = aggregateMap.get(weekStart);
+      const loginUsers = entry?.loginUsers ?? 0;
+      const awardRequests = entry?.awardRequests ?? 0;
+      const redemptionUsers = entry?.redemptionUsers ?? 0;
+      const loginEvents = entry?.loginEvents ?? 0;
+      const awardEvents = entry?.awardEvents ?? 0;
+      const redemptionEvents = entry?.redemptionEvents ?? 0;
+
+      totals.loginUsers += loginUsers;
+      totals.awardRequests += awardRequests;
+      totals.redemptionUsers += redemptionUsers;
+      totals.loginEvents += loginEvents;
+      totals.awardEvents += awardEvents;
+      totals.redemptionEvents += redemptionEvents;
+
+      const requestRate =
+        loginUsers > 0 ? Number((awardRequests / loginUsers).toFixed(4)) : null;
+      const approvalRate =
+        awardRequests > 0 ? Number((redemptionUsers / awardRequests).toFixed(4)) : null;
+      const conversionRate =
+        loginUsers > 0 ? Number((redemptionUsers / loginUsers).toFixed(4)) : null;
+
+      return {
+        weekStart,
+        weekEnd: entry?.weekEnd ?? null,
+        loginUsers,
+        awardRequests,
+        redemptionUsers,
+        loginEvents,
+        awardEvents,
+        redemptionEvents,
+        requestRate,
+        approvalRate,
+        conversionRate,
+      };
+    });
+
+    const response = {
+      scope: rawCampaignId === "all" ? "consolidated" : "campaign",
+      campaigns: selectedCampaigns.map(({ id, name }) => ({ id, name })),
+      series,
+      totals,
+      metadata: {
+        appliedFilters: {
+          dateRange: range
+            ? { from: range.from.slice(0, 10), to: range.to.slice(0, 10) }
+            : null,
+          loginType: loginType ?? null,
+          userId: userId ?? null,
+          userIp: userIp ?? null,
+        },
+        sources: {
+          logins: "mc_logins",
+          awards: "mc_awards_logs",
+          redemptions: "mc_redemptions",
+        },
+      },
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error("[conversion-funnel] Error", error);
+    res.status(500).json({
+      error: "No se pudo obtener el funnel de conversión",
       detail: error.message,
     });
   }

@@ -64,6 +64,7 @@ import type {
   ActivityResponse,
   Campaign,
   CampaignSummaryResponse,
+  ConversionFunnelResponse,
   LoginSecurityAtypicalIp,
   LoginSecurityDetailRow,
   LoginSecurityResponse,
@@ -78,6 +79,7 @@ import {
   fetchCampaignActivity,
   fetchCampaignRedemptionInsights,
   fetchCampaignLoginSecurity,
+  fetchCampaignConversionFunnel,
 } from "../api/campaigns";
 import { updateCurrentUserProfile } from "../api/auth";
 import { fetchUsers, createUser, updateUser, deleteUser } from "../api/users";
@@ -178,6 +180,26 @@ interface RedemptionTableRow {
   totalValue: number;
   averageValue: number;
   uniqueUsers: number;
+}
+
+interface ConversionFunnelChartDatum {
+  key: string;
+  weekStart: string;
+  weekEnd: string | null;
+  weekLabel: string;
+  weekRangeVerbose: string;
+  loginUsers: number;
+  awardRequests: number;
+  redemptionUsers: number;
+  loginOnlyUsers: number;
+  awardOnlyUsers: number;
+  redemptionUsersSegment: number;
+  conversionRate: number | null;
+  requestRate: number | null;
+  approvalRate: number | null;
+  loginEvents: number;
+  awardEvents: number;
+  redemptionEvents: number;
 }
 
 interface TwoFactorHeatmapWeek {
@@ -328,6 +350,12 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   const [loadingRedemptionInsights, setLoadingRedemptionInsights] =
     useState(false);
   const [redemptionError, setRedemptionError] = useState<string>();
+  const [conversionFunnel, setConversionFunnel] =
+    useState<ConversionFunnelResponse | null>(null);
+  const [loadingConversionFunnel, setLoadingConversionFunnel] =
+    useState(false);
+  const [conversionFunnelError, setConversionFunnelError] =
+    useState<string>();
   const [loginSecurity, setLoginSecurity] =
     useState<LoginSecurityResponse | null>(null);
   const [loadingLoginSecurity, setLoadingLoginSecurity] = useState(false);
@@ -876,6 +904,84 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   useEffect(() => {
     let cancelled = false;
 
+    const loadConversionFunnel = async () => {
+      if (selectedMenu !== "overview") {
+        if (!cancelled) {
+          setLoadingConversionFunnel(false);
+        }
+        return;
+      }
+
+      if (!selectedCampaign) {
+        if (!cancelled) {
+          setConversionFunnel(null);
+          setConversionFunnelError(undefined);
+          setLoadingConversionFunnel(false);
+        }
+        return;
+      }
+
+      try {
+        setConversionFunnelError(undefined);
+        setLoadingConversionFunnel(true);
+
+        const filters: Record<string, string> = {};
+        if (dateRange) {
+          filters.from = dateRange[0].format("YYYY-MM-DD");
+          filters.to = dateRange[1].format("YYYY-MM-DD");
+        }
+        if (loginType) {
+          filters.loginType = loginType;
+        }
+        if (userIdFilter) {
+          filters.userId = userIdFilter;
+        }
+        if (userIpFilter) {
+          filters.userIp = userIpFilter;
+        }
+
+        const funnelFilters =
+          Object.keys(filters).length > 0 ? filters : undefined;
+
+        const data = await fetchCampaignConversionFunnel(
+          selectedCampaign,
+          funnelFilters,
+        );
+        if (cancelled) {
+          return;
+        }
+        setConversionFunnel(data);
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setConversionFunnel(null);
+          setConversionFunnelError(
+            "No se pudo obtener el funnel de conversión.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingConversionFunnel(false);
+        }
+      }
+    };
+
+    loadConversionFunnel();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    selectedMenu,
+    selectedCampaign,
+    dateRange,
+    loginType,
+    userIdFilter,
+    userIpFilter,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const loadRedemptionInsights = async () => {
       if (selectedMenu !== "redemptions") {
         if (!cancelled) {
@@ -1066,6 +1172,93 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       };
     });
   }, [activityDataset]);
+
+  const conversionFunnelDataset = useMemo<ConversionFunnelChartDatum[]>(() => {
+    if (!conversionFunnel?.series || conversionFunnel.series.length === 0) {
+      return [];
+    }
+
+    const safeNumber = (value: unknown) => {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+      }
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : 0;
+    };
+
+    const normalizeRate = (value: number | null | undefined) => {
+      if (typeof value !== "number" || Number.isNaN(value)) {
+        return null;
+      }
+      if (value < 0) {
+        return 0;
+      }
+      if (value > 1) {
+        return 1;
+      }
+      return Number(value.toFixed(4));
+    };
+
+    return conversionFunnel.series.map((entry) => {
+      const start = dayjs(entry.weekStart, "YYYY-MM-DD", true);
+      const endCandidate = entry.weekEnd
+        ? dayjs(entry.weekEnd, "YYYY-MM-DD", true)
+        : start.isValid()
+          ? start.add(6, "day")
+          : null;
+
+      const startLabel = start.isValid()
+        ? start.format("DD/MM")
+        : entry.weekStart;
+      const endLabel = endCandidate?.isValid()
+        ? endCandidate.format("DD/MM")
+        : entry.weekEnd ?? entry.weekStart;
+
+      const loginUsers = safeNumber(entry.loginUsers);
+      const awardRequests = safeNumber(entry.awardRequests);
+      const redemptionUsers = safeNumber(entry.redemptionUsers);
+
+      const loginOnlyUsers = Math.max(loginUsers - awardRequests, 0);
+      const awardOnlyUsers = Math.max(awardRequests - redemptionUsers, 0);
+      const redemptionUsersSegment = Math.max(redemptionUsers, 0);
+
+      return {
+        key: entry.weekStart,
+        weekStart: entry.weekStart,
+        weekEnd: entry.weekEnd ?? null,
+        weekLabel: `${startLabel} → ${endLabel}`,
+        weekRangeVerbose: `Semana del ${startLabel} al ${endLabel}`,
+        loginUsers,
+        awardRequests,
+        redemptionUsers,
+        loginOnlyUsers,
+        awardOnlyUsers,
+        redemptionUsersSegment,
+        conversionRate: normalizeRate(entry.conversionRate),
+        requestRate: normalizeRate(entry.requestRate),
+        approvalRate: normalizeRate(entry.approvalRate),
+        loginEvents: safeNumber(entry.loginEvents),
+        awardEvents: safeNumber(entry.awardEvents),
+        redemptionEvents: safeNumber(entry.redemptionEvents),
+      };
+    });
+  }, [conversionFunnel]);
+
+  const conversionFunnelAxisMax = useMemo(() => {
+    if (conversionFunnelDataset.length === 0) {
+      return 1;
+    }
+    let maxValue = 0;
+    conversionFunnelDataset.forEach((entry) => {
+      if (entry.loginUsers > maxValue) {
+        maxValue = entry.loginUsers;
+      }
+    });
+    if (maxValue <= 0) {
+      return 1;
+    }
+    return Math.ceil(maxValue * 1.1);
+  }, [conversionFunnelDataset]);
 
   const loginTypeLabelMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -1901,6 +2094,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   );
 
   const hasActivityData = activityDataset.length > 0;
+  const hasConversionFunnelData = conversionFunnelDataset.length > 0;
   const hasLoginTypeDistribution = loginTypeDistribution.length > 0;
   const hasHeatmapData = loginHeatmapData.dayHeaders.length > 0;
   const hasSegmentRedemptionData =
@@ -2322,6 +2516,225 @@ const mainSection = (() => {
                       !loadingActivity && (
                         <div className="activity-empty">
                           <Empty description="No hay actividad disponible para el periodo seleccionado." />
+                        </div>
+                      )
+                    )}
+                  </Spin>
+                </div>
+              </Card>
+            </Col>
+          </Row>
+          <Row gutter={[24, 32]} align="stretch">
+            <Col span={24}>
+              <Card className="activity-card">
+                <div className="activity-heading">
+                  <div className="activity-header">
+                    <Title level={4} className="activity-title">
+                      Conversión login → redención
+                    </Title>
+                    <div className="activity-separator" />
+                  </div>
+                  <Text type="secondary" className="activity-subtitle">
+                    Evolución semanal de usuarios que pasan del login a la
+                    solicitud de premio y a la redención con los filtros
+                    aplicados.
+                  </Text>
+                </div>
+                {conversionFunnelError && (
+                  <Alert type="error" message={conversionFunnelError} showIcon />
+                )}
+                <div className="activity-body">
+                  <Spin spinning={loadingConversionFunnel}>
+                    {hasConversionFunnelData ? (
+                      <div className="activity-chart activity-chart--wide">
+                        <ResponsiveContainer width="100%" height={420}>
+                          <ReComposedChart
+                            data={conversionFunnelDataset}
+                            margin={{
+                              top: 24,
+                              right: 48,
+                              left: 48,
+                              bottom: 24,
+                            }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              vertical={false}
+                            />
+                            <XAxis
+                              dataKey="weekLabel"
+                              tick={{ fontSize: 12 }}
+                              height={50}
+                              tickMargin={12}
+                              label={{
+                                value: "Semana",
+                                position: "insideBottom",
+                                offset: -12,
+                                style: { textAnchor: "middle" },
+                              }}
+                            />
+                            <YAxis
+                              yAxisId="users"
+                              domain={[0, conversionFunnelAxisMax]}
+                              tickFormatter={(value: number) =>
+                                formatNumber(value)
+                              }
+                              tick={{ fontSize: 12 }}
+                              label={{
+                                value: "Usuarios",
+                                angle: -90,
+                                position: "insideLeft",
+                                offset: -12,
+                                style: { textAnchor: "middle" },
+                              }}
+                            />
+                            <YAxis
+                              yAxisId="rate"
+                              orientation="right"
+                              domain={[0, 1]}
+                              tickFormatter={(value: number) =>
+                                formatPercentage(value, 0)
+                              }
+                              tick={{ fontSize: 12 }}
+                              label={{
+                                value: "Conversión",
+                                angle: -90,
+                                position: "insideRight",
+                                offset: -4,
+                                style: { textAnchor: "middle" },
+                              }}
+                            />
+                            <RechartsTooltip
+                              formatter={(
+                                rawValue: number | string,
+                                name: string,
+                                payloadItem: { payload?: ConversionFunnelChartDatum },
+                              ) => {
+                                const data = payloadItem?.payload;
+                                if (name === "Conversión total") {
+                                  const numeric =
+                                    typeof rawValue === "number"
+                                      ? rawValue
+                                      : Number(rawValue);
+                                  return [
+                                    formatPercentage(
+                                      Number.isFinite(numeric) ? numeric : 0,
+                                    ),
+                                    name,
+                                  ];
+                                }
+                                if (!data) {
+                                  const numeric =
+                                    typeof rawValue === "number"
+                                      ? rawValue
+                                      : Number(rawValue);
+                                  return [
+                                    formatNumber(
+                                      Number.isFinite(numeric) ? numeric : 0,
+                                    ),
+                                    name,
+                                  ];
+                                }
+                                if (name === "Usuarios con login") {
+                                  return [formatNumber(data.loginUsers), name];
+                                }
+                                if (name === "Solicitudes de premio") {
+                                  return [
+                                    formatNumber(data.awardRequests),
+                                    name,
+                                  ];
+                                }
+                                if (name === "Usuarios con redención") {
+                                  return [
+                                    formatNumber(data.redemptionUsers),
+                                    name,
+                                  ];
+                                }
+                                const numeric =
+                                  typeof rawValue === "number"
+                                    ? rawValue
+                                    : Number(rawValue);
+                                return [
+                                  formatNumber(
+                                    Number.isFinite(numeric) ? numeric : 0,
+                                  ),
+                                  name,
+                                ];
+                              }}
+                              labelFormatter={(_label, payload) => {
+                                const data = (
+                                  payload && payload.length > 0
+                                    ? payload[0].payload
+                                    : undefined
+                                ) as ConversionFunnelChartDatum | undefined;
+                                if (!data) {
+                                  return null;
+                                }
+                                const requestRateLabel =
+                                  data.requestRate !== null
+                                    ? formatPercentage(data.requestRate)
+                                    : "N/D";
+                                const approvalRateLabel =
+                                  data.approvalRate !== null
+                                    ? formatPercentage(data.approvalRate)
+                                    : "N/D";
+                                return (
+                                  <div>
+                                    <div>{data.weekRangeVerbose}</div>
+                                    <div style={{ fontSize: 12, color: "#666" }}>
+                                      Tasa solicitud: {requestRateLabel} ·
+                                      Aprobación: {approvalRateLabel}
+                                    </div>
+                                  </div>
+                                );
+                              }}
+                            />
+                            <RechartsLegend
+                              verticalAlign="top"
+                              align="center"
+                              wrapperStyle={{ paddingBottom: 16 }}
+                            />
+                            <Bar
+                              yAxisId="users"
+                              dataKey="loginOnlyUsers"
+                              name="Usuarios con login"
+                              stackId="funnel"
+                              fill="#ffd7b5"
+                              isAnimationActive={false}
+                            />
+                            <Bar
+                              yAxisId="users"
+                              dataKey="awardOnlyUsers"
+                              name="Solicitudes de premio"
+                              stackId="funnel"
+                              fill="#f79e1b"
+                              isAnimationActive={false}
+                            />
+                            <Bar
+                              yAxisId="users"
+                              dataKey="redemptionUsersSegment"
+                              name="Usuarios con redención"
+                              stackId="funnel"
+                              fill="#eb001b"
+                              isAnimationActive={false}
+                            />
+                            <Line
+                              yAxisId="rate"
+                              type="monotone"
+                              dataKey="conversionRate"
+                              name="Conversión total"
+                              stroke="#003087"
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              isAnimationActive={false}
+                            />
+                          </ReComposedChart>
+                        </ResponsiveContainer>
+                      </div>
+                    ) : (
+                      !loadingConversionFunnel && (
+                        <div className="activity-empty">
+                          <Empty description="No se encontraron datos de conversión para los filtros actuales." />
                         </div>
                       )
                     )}
