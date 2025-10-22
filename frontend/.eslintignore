@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+*.local
+
+# Cache
+.cache/
+.vite/
+.tmp/
+
+# Archivos de configuración
+*.config.js
+*.config.ts
+vite.config.*
+eslint.config.*
+
+# Cobertura y testing
+coverage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local

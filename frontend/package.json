@@ -9,8 +9,8 @@
     "build:with-types": "npm run type-check && vite build",
     "type-check": "tsc -b",
     "type-check:watch": "tsc -b --watch",
-    "lint": "eslint . --max-warnings 0 --cache --cache-location node_modules/.cache/eslint",
-    "lint:fix": "eslint . --fix --cache --cache-location node_modules/.cache/eslint",
+    "lint": "eslint src --max-warnings 0 --cache --cache-location node_modules/.cache/eslint --cache-strategy content",
+    "lint:fix": "eslint src --fix --cache --cache-location node_modules/.cache/eslint --cache-strategy content",
     "preview": "vite preview",
     "clean": "rm -rf dist node_modules/.vite node_modules/.tmp",
     "clean:cache": "rm -rf node_modules/.vite node_modules/.tmp"
