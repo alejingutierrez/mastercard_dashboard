@@ -440,11 +440,21 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     }
   }, [currentUser.role, selectedMenu]);
 
+  const openProfileModal = useCallback(() => {
+    profileForm.setFieldsValue({
+      name: currentUser.name ?? "",
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setProfileModalVisible(true);
+  }, [profileForm, currentUser.name]);
+
   useEffect(() => {
     if (mustChangePassword && !profileModalVisible) {
       openProfileModal();
     }
-  }, [mustChangePassword, profileModalVisible]);
+  }, [mustChangePassword, profileModalVisible, openProfileModal]);
 
   useEffect(() => {
     if (!userModalVisible) {
@@ -484,7 +494,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     setUserModalVisible(true);
   };
 
-  const handleOpenEditUser = (user: DashboardUser) => {
+  const handleOpenEditUser = useCallback((user: DashboardUser) => {
     setEditingUser(user);
     userForm.setFieldsValue({
       email: user.email,
@@ -498,7 +508,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       forcePasswordReset: user.mustResetPassword ?? false,
     });
     setUserModalVisible(true);
-  };
+  }, [userForm, allCampaignIds]);
 
   const handleSubmitUser = async () => {
     try {
@@ -562,16 +572,6 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     message.info("Se generó una contraseña temporal. Compártela de forma segura.");
   };
 
-  const openProfileModal = () => {
-    profileForm.setFieldsValue({
-      name: currentUser.name ?? "",
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    });
-    setProfileModalVisible(true);
-  };
-
   const handleCloseProfileModal = () => {
     setProfileModalVisible(false);
     profileForm.resetFields();
@@ -627,7 +627,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     }
   };
 
-  const handleDeleteUser = async (user: DashboardUser) => {
+  const handleDeleteUser = useCallback(async (user: DashboardUser) => {
     setDeletingUserId(user.id);
     try {
       await deleteUser(user.id);
@@ -639,7 +639,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     } finally {
       setDeletingUserId(null);
     }
-  };
+  }, []);
 
   const campaignOptions = useMemo(
     () => [
@@ -701,6 +701,11 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     }
   }, [selectedMenu]);
 
+  const allowedCampaignIdsKey = useMemo(
+    () => currentUser.allowedCampaignIds?.join("|") || "",
+    [currentUser.allowedCampaignIds]
+  );
+
   useEffect(() => {
     const loadCampaigns = async () => {
       try {
@@ -731,7 +736,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     };
 
     loadCampaigns();
-  }, [currentUser.allowedCampaignIds?.join("|")]);
+  }, [allowedCampaignIdsKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1766,7 +1771,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         ),
       },
     ],
-    [campaignNameMap, currentUser.id, deletingUserId, totalCampaignCount],
+    [campaignNameMap, currentUser.id, deletingUserId, totalCampaignCount, handleOpenEditUser, handleDeleteUser],
   );
 
   const userTableData = useMemo(
@@ -2697,7 +2702,7 @@ const mainSection = (() => {
                       message="Observaciones de la fuente"
                       description={
                         <Space direction="vertical" size="small">
-                          {loginSecurityNotes.map((note) => (
+                          {loginSecurityNotes.map((note: string) => (
                             <Text key={note}>{note}</Text>
                           ))}
                           {loginSecurityDebug && (
@@ -4039,7 +4044,6 @@ const mainSection = (() => {
                               formatter={(
                                 rawValue: number | string,
                                 name: string,
-                                payload,
                               ) => {
                                 const numeric =
                                   typeof rawValue === "number"

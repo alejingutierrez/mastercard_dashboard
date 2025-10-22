@@ -22,10 +22,7 @@ export const getAuthToken = () => authToken;
 
 apiClient.interceptors.request.use((config) => {
   if (authToken) {
-    config.headers = {
-      ...(config.headers ?? {}),
-      Authorization: `Bearer ${authToken}`,
-    };
+    config.headers.set('Authorization', `Bearer ${authToken}`);
   }
   return config;
 });
