@@ -271,6 +271,13 @@ export interface LoginSecurityMetadata {
     logins: string;
     redemptions: string;
   };
+  notes?: string[];
+  debug?: {
+    loginsByIpRows: number;
+    redemptionsByIpRows: number;
+    loginDetailsRows: number;
+    redemptionDetailsRows: number;
+  };
 }
 
 export interface LoginSecurityResponse {

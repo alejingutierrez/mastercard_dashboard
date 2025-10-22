@@ -5,9 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "build": "npm run type-check && vite build",
+    "build:force": "vite build",
+    "type-check": "tsc -b --force",
+    "type-check:watch": "tsc -b --watch",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "preview": "vite preview",
+    "clean": "rm -rf dist node_modules/.vite node_modules/.tmp",
+    "clean:cache": "rm -rf node_modules/.vite node_modules/.tmp"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
