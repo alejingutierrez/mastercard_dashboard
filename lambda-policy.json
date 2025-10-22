@@ -1,0 +1,12 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-west-2:071930880555:secret:rds!cluster-63217091-3511-41dd-a6bf-5e022f920411-Ht91K8"
+    }
+  ]
+}

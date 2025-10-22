@@ -1,0 +1,37 @@
+[
+  {
+    "id": "a5dbfdc7-6f62-471f-94b7-a3010dfa1bb6",
+    "email": "admin@dashboard.local",
+    "emailNormalized": "admin@dashboard.local",
+    "name": "Administrador",
+    "role": "admin",
+    "status": "active",
+    "passwordHash": "$2a$10$8vpKY2ta.McWnvzkpzWEausxi.60CjRk0rIFwaVg2x2YeKlt..xQe",
+    "createdAt": "2025-10-21T19:22:00.347Z",
+    "updatedAt": "2025-10-21T19:22:00.347Z",
+    "allowedCampaignIds": [
+      "debitazo-5",
+      "bogota-uso-10",
+      "debitazo-6",
+      "davivienda-afluentes-3",
+      "pacifico-sag-5",
+      "pichincha"
+    ],
+    "mustResetPassword": false
+  },
+  {
+    "id": "c0947cdd-07dd-4945-832b-a5de7b2b404a",
+    "email": "pichincha@pichincha.com",
+    "emailNormalized": "pichincha@pichincha.com",
+    "name": "pichincha@pichincha.com",
+    "role": "viewer",
+    "status": "active",
+    "passwordHash": "$2a$10$8blF1VFbAauaO2pEya4a6.tONpn76H7LbAAmzC18wJkOSQXKmzkrK",
+    "createdAt": "2025-10-22T00:49:26.453Z",
+    "updatedAt": "2025-10-22T00:50:01.277Z",
+    "allowedCampaignIds": [
+      "pichincha"
+    ],
+    "mustResetPassword": false
+  }
+]
