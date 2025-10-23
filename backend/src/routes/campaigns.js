@@ -16,6 +16,7 @@ const PERFORMANCE_WEIGHTS = Object.freeze({
 });
 
 const MONTH_START_FORMAT = "%Y-%m-01";
+const WEEK_DATE_FORMAT = "%Y-%m-%d";
 const TOP_MERCHANT_PIE_LIMIT = 10;
 const HEATMAP_TOP_MERCHANTS = 6;
 const HEATMAP_TOP_AMOUNTS = 6;
@@ -2111,7 +2112,7 @@ const buildWeeklyLoginFunnelQuery = ({ range }) => {
     `l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
     "l.date IS NOT NULL",
   ];
-  const params = [];
+  const params = [WEEK_DATE_FORMAT, WEEK_DATE_FORMAT];
 
   if (range) {
     conditions.push("l.date BETWEEN %s AND %s");
@@ -2122,10 +2123,10 @@ const buildWeeklyLoginFunnelQuery = ({ range }) => {
 
   const sql = `
     SELECT
-      DATE_FORMAT(DATE_SUB(l.date, INTERVAL WEEKDAY(l.date) DAY), '%Y-%m-%d') AS week_start,
+      DATE_FORMAT(DATE_SUB(l.date, INTERVAL WEEKDAY(l.date) DAY), %s) AS week_start,
       DATE_FORMAT(
         DATE_ADD(DATE_SUB(l.date, INTERVAL WEEKDAY(l.date) DAY), INTERVAL 6 DAY),
-        '%Y-%m-%d'
+        %s
       ) AS week_end,
       COUNT(DISTINCT l.idmask) AS unique_users,
       COUNT(*) AS total_events
@@ -2144,7 +2145,7 @@ const buildWeeklyAwardFunnelQuery = ({ range }) => {
     `al.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
     "al.date IS NOT NULL",
   ];
-  const params = [];
+  const params = [WEEK_DATE_FORMAT, WEEK_DATE_FORMAT];
 
   if (range) {
     conditions.push("al.date BETWEEN %s AND %s");
@@ -2155,10 +2156,10 @@ const buildWeeklyAwardFunnelQuery = ({ range }) => {
 
   const sql = `
     SELECT
-      DATE_FORMAT(DATE_SUB(al.date, INTERVAL WEEKDAY(al.date) DAY), '%Y-%m-%d') AS week_start,
+      DATE_FORMAT(DATE_SUB(al.date, INTERVAL WEEKDAY(al.date) DAY), %s) AS week_start,
       DATE_FORMAT(
         DATE_ADD(DATE_SUB(al.date, INTERVAL WEEKDAY(al.date) DAY), INTERVAL 6 DAY),
-        '%Y-%m-%d'
+        %s
       ) AS week_end,
       COUNT(DISTINCT al.idmask) AS unique_users,
       COUNT(*) AS total_events
@@ -2177,7 +2178,7 @@ const buildWeeklyRedemptionFunnelQuery = ({ range }) => {
     `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
     "r.date IS NOT NULL",
   ];
-  const params = [];
+  const params = [WEEK_DATE_FORMAT, WEEK_DATE_FORMAT];
 
   if (range) {
     conditions.push("r.date BETWEEN %s AND %s");
@@ -2188,10 +2189,10 @@ const buildWeeklyRedemptionFunnelQuery = ({ range }) => {
 
   const sql = `
     SELECT
-      DATE_FORMAT(DATE_SUB(r.date, INTERVAL WEEKDAY(r.date) DAY), '%Y-%m-%d') AS week_start,
+      DATE_FORMAT(DATE_SUB(r.date, INTERVAL WEEKDAY(r.date) DAY), %s) AS week_start,
       DATE_FORMAT(
         DATE_ADD(DATE_SUB(r.date, INTERVAL WEEKDAY(r.date) DAY), INTERVAL 6 DAY),
-        '%Y-%m-%d'
+        %s
       ) AS week_end,
       COUNT(DISTINCT r.idmask) AS unique_users,
       COUNT(*) AS total_events

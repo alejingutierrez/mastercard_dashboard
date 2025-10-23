@@ -2679,13 +2679,14 @@ const mainSection = (() => {
                                     ? formatPercentage(data.approvalRate)
                                     : "N/D";
                                 return (
-                                  <div>
-                                    <div>{data.weekRangeVerbose}</div>
-                                    <div style={{ fontSize: 12, color: "#666" }}>
-                                      Tasa solicitud: {requestRateLabel} ·
-                                      Aprobación: {approvalRateLabel}
-                                    </div>
-                                  </div>
+                                  <>
+                                    <span>{data.weekRangeVerbose}</span>
+                                    <br />
+                                    <span style={{ fontSize: 12, color: "#666" }}>
+                                      Tasa solicitud: {requestRateLabel} · Aprobación:{" "}
+                                      {approvalRateLabel}
+                                    </span>
+                                  </>
                                 );
                               }}
                             />
@@ -3882,7 +3883,7 @@ const mainSection = (() => {
               onCancel={mustChangePassword ? undefined : handleCloseProfileModal}
               onOk={handleSubmitProfile}
               confirmLoading={profileSubmitting}
-              destroyOnClose
+              destroyOnHidden
               maskClosable={!mustChangePassword}
               closable={!mustChangePassword}
               keyboard={!mustChangePassword}
@@ -4022,7 +4023,7 @@ const mainSection = (() => {
                 }}
                 onOk={handleSubmitUser}
                 confirmLoading={userModalSubmitting}
-                destroyOnClose
+                destroyOnHidden
                 maskClosable={false}
                 okText={isEditingUser ? "Guardar cambios" : "Crear usuario"}
                 cancelText="Cancelar"

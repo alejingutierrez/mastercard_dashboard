@@ -33,5 +33,22 @@
       "pichincha"
     ],
     "mustResetPassword": false
+  },
+  {
+    "id": "98d6a6e4-8a1d-4a2e-b9f4-5e4b677214f9",
+    "email": "davivienda@davivienda.com",
+    "emailNormalized": "davivienda@davivienda.com",
+    "name": "davivienda@davivienda.com",
+    "role": "viewer",
+    "status": "active",
+    "passwordHash": "$2a$10$53tpzrlt3huZN2XnShqe8.Bg3bCUlAXy8Je7p6EHxGFNXb1O83WxC",
+    "createdAt": "2025-10-23T00:07:52.272Z",
+    "updatedAt": "2025-10-23T00:08:18.658Z",
+    "allowedCampaignIds": [
+      "debitazo-5",
+      "debitazo-6",
+      "davivienda-afluentes-3"
+    ],
+    "mustResetPassword": false
   }
 ]
