@@ -1,15 +1,11 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import react from '@vitejs/plugin-react-swc'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    react({
-      // Optimize React plugin performance
-      babel: {
-        plugins: [],
-      },
-    }),
+    // Use the SWC-powered React plugin for faster transforms
+    react(),
   ],
   build: {
     // Optimize build performance
