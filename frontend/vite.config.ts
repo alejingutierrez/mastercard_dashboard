@@ -22,8 +22,8 @@ export default defineConfig({
       output: {
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
-          'ui-vendor': ['antd', '@ant-design/icons', '@mui/material'],
-          'chart-vendor': ['recharts', '@mui/x-charts'],
+          'ui-vendor': ['antd', '@ant-design/icons'],
+          'chart-vendor': ['recharts'],
         },
       },
     },
@@ -37,7 +37,7 @@ export default defineConfig({
   },
   // Optimize deps to prevent hanging
   optimizeDeps: {
-    include: ['react', 'react-dom', 'antd', '@mui/material'],
+    include: ['react', 'react-dom', 'antd', '@ant-design/icons'],
     force: false, // Don't force re-optimization
   },
   // Disable type checking in build (use separate type-check script)
