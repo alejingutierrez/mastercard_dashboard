@@ -71,3 +71,50 @@ export default defineConfig([
   },
 ])
 ```
+
+## Scripts Disponibles
+
+### Scripts de Desarrollo
+- `npm run dev` - Inicia el servidor de desarrollo con Vite
+- `npm run build` - Construye la aplicación para producción
+- `npm run build:with-types` - Verifica tipos antes de construir
+- `npm run preview` - Previsualiza la build de producción
+
+### Scripts de Verificación de Tipos
+- `npm run type-check` - Verifica tipos TypeScript (con flag --force para evitar problemas de cache)
+- `npm run type-check:watch` - Verifica tipos en modo watch
+- `npm run type-check:clean` - Limpia cache de TypeScript y verifica tipos desde cero
+
+### Scripts de Linting
+- `npm run lint` - Ejecuta ESLint sin cache (más confiable, recomendado)
+- `npm run lint:cached` - Ejecuta ESLint con cache (más rápido en ejecuciones sucesivas)
+- `npm run lint:fix` - Corrige automáticamente errores de linting
+- `npm run lint:fix:cached` - Corrige con cache habilitado
+- `npm run lint:debug` - Ejecuta ESLint en modo debug para troubleshooting
+
+### Scripts de Limpieza
+- `npm run clean` - Elimina directorios de build y cache
+- `npm run clean:cache` - Elimina solo los caches (vite, TypeScript, ESLint)
+
+## Solución a Problemas de Timeout
+
+Si experimentas timeouts con los comandos `npm run type-check` o `npm run lint`, esto puede deberse a:
+
+1. **Cache corrupto**: Ejecuta `npm run clean:cache` y vuelve a intentar
+2. **Build info desactualizado**: Usa `npm run type-check:clean` para reconstruir desde cero
+3. **Problemas de ESLint**: Los scripts principales ahora no usan cache por defecto para mayor confiabilidad
+
+### Cambios Implementados
+
+**ESLint Configuration** (eslint.config.js):
+- Patrones de ignore mejorados con prefijos `**/` para mejor compatibilidad
+- Scope de archivos limitado a `src/**/*.{ts,tsx}` para evitar analizar archivos innecesarios
+- Plugins configurados explícitamente en lugar de usar configs que pueden causar problemas
+- Eliminada la cache por defecto de los scripts principales
+
+**TypeScript Configuration** (package.json):
+- Agregado flag `--force` a `type-check` para evitar problemas con build info
+- Nuevo script `type-check:clean` para limpiar y reconstruir completamente
+
+**Limpieza de Cache**:
+- Scripts de limpieza mejorados para incluir todos los directorios de cache relevantes

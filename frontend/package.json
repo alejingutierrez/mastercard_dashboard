@@ -7,13 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "build:with-types": "npm run type-check && vite build",
-    "type-check": "tsc -b",
+    "type-check": "tsc -b --force",
     "type-check:watch": "tsc -b --watch",
-    "lint": "eslint src --max-warnings 0 --cache --cache-location node_modules/.cache/eslint --cache-strategy content",
-    "lint:fix": "eslint src --fix --cache --cache-location node_modules/.cache/eslint --cache-strategy content",
+    "type-check:clean": "tsc -b --clean && tsc -b",
+    "lint": "eslint src --max-warnings 0",
+    "lint:cached": "eslint src --max-warnings 0 --cache --cache-location node_modules/.cache/eslint",
+    "lint:fix": "eslint src --fix",
+    "lint:fix:cached": "eslint src --fix --cache --cache-location node_modules/.cache/eslint",
+    "lint:debug": "ESLINT_USE_FLAT_CONFIG=true eslint src --debug",
     "preview": "vite preview",
-    "clean": "rm -rf dist node_modules/.vite node_modules/.tmp",
-    "clean:cache": "rm -rf node_modules/.vite node_modules/.tmp"
+    "clean": "rm -rf dist node_modules/.vite node_modules/.tmp node_modules/.cache",
+    "clean:cache": "rm -rf node_modules/.vite node_modules/.tmp node_modules/.cache/eslint"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
