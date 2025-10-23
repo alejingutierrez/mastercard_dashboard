@@ -35,7 +35,7 @@ app.use((req, res) => {
 
 initializeUserStore()
   .then(() => {
-    app.listen(port, () => {
+    app.listen(port, "0.0.0.0", () => {
       console.log(`API Mastercard dashboard escuchando en puerto ${port}`);
     });
   })

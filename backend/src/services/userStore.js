@@ -4,7 +4,9 @@ const { randomUUID } = require("node:crypto");
 const bcrypt = require("bcryptjs");
 const { CAMPAIGNS } = require("../config/campaigns");
 
-const USERS_FILE = path.join(__dirname, "../data/dashboardUsers.json");
+const USERS_FILE =
+  process.env.DASHBOARD_USERS_FILE ||
+  path.join(__dirname, "../data/dashboardUsers.json");
 const HASH_ROUNDS = Number(process.env.DASHBOARD_BCRYPT_ROUNDS || 10);
 const ALL_CAMPAIGN_IDS = CAMPAIGNS.map((campaign) => campaign.id);
 

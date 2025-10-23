@@ -208,3 +208,13 @@ Cada ítem debe dividirse en tareas frontend (componentes, navegación, estados 
 3. Preparar historias/tickets por visual con criterios de aceptación, reglas de filtrado y catalogación de `log_type`, segmentos y aliados.
 4. Diseñar wireframes de alta fidelidad para las visualizaciones complejas (series multi-eje, heatmaps, boxplots) y validarlos con usuarios clave.
 5. Evaluar brechas de datos adicionales (geolocalización de IP, motivos de `block`) y planear la captura futura sin comprometer la política de solo lectura.
+
+
+
+# Creación 
+Vas a revisar el README_lambda_proxy.md para entender como se hace la validación y consultas a las bases del proyecto por medio del lambda. Nuncas vas a exceder terminos o permisos de seguridad. Y si es necesario revises el docs/data_dictionary.md que contiene las consultas necesarias. Revisa siempre lo que ya hay de front para que seamos consistentes. Vas a revisar también e l BACKLOG.md para poder entender completamente el futuro del desarrollo y lo que deberímos ir creando. Debes estudiar el front que ya esta creado para que tengamos consistencia en elementos, estilos, tamaños, etc. Todo nuevo grafico debe poder responder a los filtros que hay y al buscador que hay de id mask y de ip. Vas a crear un grafico dentro de la pagina de xxxxx que irá al final de lo que ya hoy existe. Asegurate de que se traen datos, puedes usar de referencia la campaña debitazo 5, pero debe funcionar para cualquier campaña. 
+
+# Levantar 
+Levanta el docker, asegurate de que los servicios y los containers estén absolutamente estables sin errores. Debemos asegurarnos de la estabailidad de este desarrollo por encima de nada y de que sus test todos pasan. Siempre antes de un despliegue o de reiniciar un docker se deben correr los test completos. haz un prune al docker de este repo, vuelvelo a subir, quedate escuchando varios minutos los logs para saber que todo está estable y funcionando como se debe. 
+
+anazlia todo el repo y analiza los servicios de aws que necesitas para desplegar todo este desarrollo compelto en aws y al final me vas a entregar la url de cloudfront, asegurate de que todo quede funcionando bien con este despliegue. Si ves vas a ver que tienes suficientes acceso en aws para hacer el despliegue completo. NO tienes que crear nada nuevo, ya todo está listo. Solo necesito que te asegures de asegures de hacer un buen despliegue y que quede conectado al ci/cd
