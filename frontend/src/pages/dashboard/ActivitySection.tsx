@@ -78,13 +78,13 @@ const ActivitySection = ({
             <div className="activity-heading">
               <div className="activity-header">
                 <Title level={4} className="activity-title">
-                  Logins vs redenciones diarias
+                  Logins vs redenciones válidas diarias
                 </Title>
                 <div className="activity-separator" />
               </div>
               <Text type="secondary" className="activity-subtitle">
-                Evolución diaria de logins y redenciones con los filtros
-                actuales.
+                Evolución diaria de logins y redenciones válidas con los filtros
+                actuales (excluye intentos fallidos).
               </Text>
             </div>
 
@@ -132,7 +132,7 @@ const ActivitySection = ({
                           tickFormatter={(value: number) => formatNumber(value)}
                           tick={{ fontSize: 12 }}
                           label={{
-                            value: "Redenciones diarias",
+                            value: "Redenciones válidas",
                             angle: -90,
                             position: "insideRight",
                             offset: -4,
@@ -166,7 +166,7 @@ const ActivitySection = ({
                           yAxisId="redemptions"
                           type="monotone"
                           dataKey="redemptionsCount"
-                          name="Redenciones diarias"
+                          name="Redenciones válidas"
                           stroke="#f79e1b"
                           strokeWidth={2}
                           dot={false}
@@ -232,12 +232,12 @@ const ActivitySection = ({
             <div className="activity-heading">
               <div className="activity-header">
                 <Title level={4} className="activity-title">
-                  Valor acumulado vs redenciones diarias
+                  Valor acumulado vs redenciones válidas diarias
                 </Title>
                 <div className="activity-separator" />
               </div>
               <Text type="secondary" className="activity-subtitle">
-                Suma acumulada en COP frente a redenciones diarias para los
+                Suma acumulada en COP frente a redenciones válidas diarias para los
                 filtros actuales.
               </Text>
             </div>

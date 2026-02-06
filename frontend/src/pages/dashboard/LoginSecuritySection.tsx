@@ -159,12 +159,12 @@ const LoginSecuritySection = ({
                 <div className="activity-heading">
                   <div className="activity-header">
                     <Title level={4} className="activity-title">
-                      IPs con más redenciones
+                      IPs con más intentos de redención
                     </Title>
                     <div className="activity-separator" />
                   </div>
                   <Text type="secondary" className="activity-subtitle">
-                    Top 15 direcciones IP con mayor cantidad de redenciones acumuladas.
+                    Top 15 direcciones IP con mayor cantidad de intentos de redención acumulados (incluye intentos fallidos).
                   </Text>
                 </div>
                 <div className="activity-body">
@@ -192,10 +192,22 @@ const LoginSecuritySection = ({
                               const numeric =
                                 typeof rawValue === "number" ? rawValue : Number(rawValue);
                               const safeValue = Number.isFinite(numeric) ? numeric : 0;
-                              return [formatNumber(safeValue), "Redenciones"];
+                              return [formatNumber(safeValue), "Intentos"];
                             }}
                             labelFormatter={(label: string, payload) => {
                               const firstPayload = payload?.[0]?.payload ?? {};
+                              const redemptionAttempts =
+                                typeof firstPayload.redemptionAttempts === "number"
+                                  ? firstPayload.redemptionAttempts
+                                  : 0;
+                              const uniqueAttemptRedeemers =
+                                typeof firstPayload.uniqueAttemptRedeemers === "number"
+                                  ? firstPayload.uniqueAttemptRedeemers
+                                  : 0;
+                              const validRedemptions =
+                                typeof firstPayload.validRedemptions === "number"
+                                  ? firstPayload.validRedemptions
+                                  : 0;
                               const redeemedValue =
                                 typeof firstPayload.redeemedValue === "number"
                                   ? firstPayload.redeemedValue
@@ -204,15 +216,19 @@ const LoginSecuritySection = ({
                                 typeof firstPayload.uniqueRedeemers === "number"
                                   ? firstPayload.uniqueRedeemers
                                   : 0;
-                              return `${label} · ${formatValue(
+                              return `${label} · Intentos: ${formatNumber(
+                                redemptionAttempts,
+                              )} (${formatNumber(uniqueAttemptRedeemers)} usuarios) · Válidas: ${formatNumber(
+                                validRedemptions,
+                              )} (${formatNumber(uniqueRedeemers)} usuarios) · ${formatValue(
                                 redeemedValue,
                                 "currency",
-                              )} · ${formatNumber(uniqueRedeemers)} usuarios`;
+                              )}`;
                             }}
                           />
                           <Bar
-                            dataKey="totalRedemptions"
-                            name="Redenciones"
+                            dataKey="redemptionAttempts"
+                            name="Intentos"
                             fill="#f79e1b"
                             radius={[0, 8, 8, 0]}
                           />
@@ -238,7 +254,7 @@ const LoginSecuritySection = ({
                 <div className="activity-separator" />
               </div>
               <Text type="secondary" className="activity-subtitle">
-                Detalle de logins y redenciones por combinación IP · idmask respetando los filtros aplicados.
+                Detalle de logins y redenciones (intentos vs válidas) por combinación IP · idmask respetando los filtros aplicados.
               </Text>
             </div>
             <div className="activity-body">
@@ -267,7 +283,7 @@ const LoginSecuritySection = ({
                 <div className="activity-separator" />
               </div>
               <Text type="secondary" className="activity-subtitle">
-                Heurísticas de riesgo basadas en concentración de redenciones, rapidez de canje y conversión login→redención.
+                Heurísticas de riesgo basadas en concentración de intentos, rapidez y conversión login→intento.
               </Text>
             </div>
             <div className="activity-body">

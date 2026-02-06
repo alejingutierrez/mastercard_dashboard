@@ -18,9 +18,12 @@ export interface SummaryFilters {
   loginType?: string;
   userId?: string;
   userIp?: string;
+  mode?: "kpis" | "full";
 }
 
-export type ActivityFilters = SummaryFilters;
+export type ActivityFilters = SummaryFilters & {
+  includeFilters?: "0" | "1";
+};
 
 export const fetchCampaignSummary = async (
   campaignId: string,

@@ -417,7 +417,13 @@ const buildMonthlyRedemptionSummaryQuery = ({
 }) => {
   const params = [MONTH_START_FORMAT];
   const conditions = [
-    `(r.idmask IS NULL OR r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
+    "r.idmask IS NOT NULL",
+    "TRIM(r.idmask) <> ''",
+    `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.id_award IS NOT NULL",
+    "r.id_award <> 0",
+    "r.value IS NOT NULL",
+    "r.value > 0",
     "r.date IS NOT NULL",
     "r.date <> '0000-00-00 00:00:00'",
   ];
@@ -653,7 +659,11 @@ const buildGoalBreakdownQuery = ({
 
 const buildRedemptionAmountDistributionQuery = ({ range }) => {
   const conditions = [
-    `(r.idmask IS NULL OR r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
+    "r.idmask IS NOT NULL",
+    "TRIM(r.idmask) <> ''",
+    `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.id_award IS NOT NULL",
+    "r.id_award <> 0",
     "r.value IS NOT NULL",
     "r.value > 0",
     "r.date IS NOT NULL",
@@ -685,7 +695,13 @@ const buildRedemptionAmountDistributionQuery = ({ range }) => {
 
 const buildMerchantTotalsQuery = ({ range }) => {
   const conditions = [
-    `(r.idmask IS NULL OR r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
+    "r.idmask IS NOT NULL",
+    "TRIM(r.idmask) <> ''",
+    `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.id_award IS NOT NULL",
+    "r.id_award <> 0",
+    "r.value IS NOT NULL",
+    "r.value > 0",
     "r.date IS NOT NULL",
     "r.date <> '0000-00-00 00:00:00'",
   ];
@@ -716,7 +732,11 @@ const buildMerchantTotalsQuery = ({ range }) => {
 
 const buildMerchantAmountMatrixQuery = ({ range }) => {
   const conditions = [
-    `(r.idmask IS NULL OR r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
+    "r.idmask IS NOT NULL",
+    "TRIM(r.idmask) <> ''",
+    `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.id_award IS NOT NULL",
+    "r.id_award <> 0",
     "r.value IS NOT NULL",
     "r.value > 0",
     "r.date IS NOT NULL",
@@ -869,8 +889,20 @@ const buildLoginsByIpQuery = ({ range }) => {
 const buildRedemptionsByIpQuery = ({ range }) => {
   const conditions = [
     `(r.idmask IS NULL OR r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
+    "r.date IS NOT NULL",
+    "r.date <> '0000-00-00 00:00:00'",
   ];
   const params = [];
+
+  const validRedemptionCondition = [
+    "r.idmask IS NOT NULL",
+    "TRIM(r.idmask) <> ''",
+    `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.id_award IS NOT NULL",
+    "r.id_award <> 0",
+    "r.value IS NOT NULL",
+    "r.value > 0",
+  ].join(" AND ");
 
   if (range) {
     conditions.push("r.date BETWEEN %s AND %s");
@@ -883,10 +915,13 @@ const buildRedemptionsByIpQuery = ({ range }) => {
     SELECT
       COALESCE(NULLIF(TRIM(r.ip), ''), 'Sin IP') AS ip_label,
       COUNT(*) AS total_redemptions,
-      COUNT(DISTINCT r.idmask) AS unique_redeemers,
+      COUNT(DISTINCT NULLIF(TRIM(r.idmask), '')) AS unique_redeemers,
+      SUM(CASE WHEN ${validRedemptionCondition} THEN 1 ELSE 0 END) AS valid_redemptions,
+      COUNT(DISTINCT CASE WHEN ${validRedemptionCondition} THEN r.idmask ELSE NULL END) AS valid_unique_redeemers,
+      SUM(CASE WHEN r.idmask IS NULL OR TRIM(r.idmask) = '' THEN 1 ELSE 0 END) AS missing_idmask,
       MIN(NULLIF(r.date, '0000-00-00 00:00:00')) AS first_redemption_at,
       MAX(NULLIF(r.date, '0000-00-00 00:00:00')) AS last_redemption_at,
-      COALESCE(SUM(r.value), 0) AS redeemed_value
+      COALESCE(SUM(CASE WHEN ${validRedemptionCondition} THEN r.value ELSE 0 END), 0) AS redeemed_value
     FROM {db}.mc_redemptions r
     ${whereClause}
     GROUP BY ip_label
@@ -938,9 +973,19 @@ const buildLoginsByIpAndIdmaskQuery = ({ range }) => {
 const buildRedemptionsByIpAndIdmaskQuery = ({ range }) => {
   const conditions = [
     "r.idmask IS NOT NULL",
+    "TRIM(r.idmask) <> ''",
     `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.date IS NOT NULL",
+    "r.date <> '0000-00-00 00:00:00'",
   ];
   const params = [];
+
+  const validRedemptionCondition = [
+    "r.id_award IS NOT NULL",
+    "r.id_award <> 0",
+    "r.value IS NOT NULL",
+    "r.value > 0",
+  ].join(" AND ");
 
   if (range) {
     conditions.push("r.date BETWEEN %s AND %s");
@@ -953,14 +998,15 @@ const buildRedemptionsByIpAndIdmaskQuery = ({ range }) => {
     SELECT
       r.ip AS ip,
       r.idmask AS idmask,
-      COUNT(*) AS redemption_count,
+      COUNT(*) AS redemption_attempts,
+      SUM(CASE WHEN ${validRedemptionCondition} THEN 1 ELSE 0 END) AS valid_redemptions,
       MIN(NULLIF(r.date, '0000-00-00 00:00:00')) AS first_redemption_at,
       MAX(NULLIF(r.date, '0000-00-00 00:00:00')) AS last_redemption_at,
-      COALESCE(SUM(r.value), 0) AS total_value
+      COALESCE(SUM(CASE WHEN ${validRedemptionCondition} THEN r.value ELSE 0 END), 0) AS redeemed_value
     FROM {db}.mc_redemptions r
     ${whereClause}
     GROUP BY r.ip, r.idmask
-    ORDER BY redemption_count DESC
+    ORDER BY redemption_attempts DESC
     LIMIT 400;
   `;
 
@@ -1447,6 +1493,8 @@ router.get("/:id/summary", async (req, res) => {
   const range = parseDateRange(req.query);
 
   try {
+    const mode = typeof req.query.mode === "string" ? req.query.mode.trim() : "";
+    const kpisOnly = mode === "kpis";
     const loginType = normalizeSelectorValue(req.query.loginType);
     const userId = normalizeSelectorValue(req.query.userId);
     const userIp = normalizeSelectorValue(req.query.userIp);
@@ -1481,61 +1529,67 @@ router.get("/:id/summary", async (req, res) => {
       })
     );
 
-    const chartsPromise = Promise.all(
-      (campaign.charts || []).map(async (chart) => {
-        const { sql: chartSql, params: chartParams } = applyFiltersToSql({
-          sql: chart.sql,
-          params: [],
-          database: campaign.database,
-          baseTable: chart.baseTable,
-          filters,
-          range,
-        });
+    const chartsPromise = kpisOnly
+      ? Promise.resolve([])
+      : Promise.all(
+          (campaign.charts || []).map(async (chart) => {
+            const { sql: chartSql, params: chartParams } = applyFiltersToSql({
+              sql: chart.sql,
+              params: [],
+              database: campaign.database,
+              baseTable: chart.baseTable,
+              filters,
+              range,
+            });
 
-        const result = await runQuery(campaign.database, chartSql, chartParams);
-        return {
-          key: chart.key,
-          title: chart.title,
-          data: result.rows || [],
-        };
-      })
-    );
+            const result = await runQuery(campaign.database, chartSql, chartParams);
+            return {
+              key: chart.key,
+              title: chart.title,
+              data: result.rows || [],
+            };
+          })
+        );
+
+    const samplePromise = kpisOnly
+      ? Promise.resolve({ rows: [], rowCount: 0 })
+      : (async () => {
+          if (!campaign.sampleSql) {
+            return { rows: [], rowCount: 0 };
+          }
+
+          const { sql: sampleSql, params: sampleParams } = applyFiltersToSql({
+            sql: campaign.sampleSql,
+            params: [],
+            database: campaign.database,
+            filters,
+            range,
+          });
+
+          try {
+            const result = await runQuery(campaign.database, sampleSql, sampleParams);
+            return {
+              rows: result.rows,
+              rowCount: result.rowCount,
+            };
+          } catch (sampleError) {
+            const message = sampleError?.message || "";
+            if (/Unknown column/i.test(message) || /1054/.test(message)) {
+              console.warn("[summary] Sample query omitted", {
+                campaign: campaign.id,
+                sql: sampleSql,
+                error: message,
+              });
+              return { rows: [], rowCount: 0 };
+            }
+            throw sampleError;
+          }
+        })();
 
     const [metrics, charts, sample] = await Promise.all([
       metricsPromise,
       chartsPromise,
-      (async () => {
-        if (!campaign.sampleSql) {
-          return { rows: [], rowCount: 0 };
-        }
-
-        const { sql: sampleSql, params: sampleParams } = applyFiltersToSql({
-          sql: campaign.sampleSql,
-          params: [],
-          database: campaign.database,
-          filters,
-          range,
-        });
-
-        try {
-          const result = await runQuery(campaign.database, sampleSql, sampleParams);
-          return {
-            rows: result.rows,
-            rowCount: result.rowCount,
-          };
-        } catch (sampleError) {
-          const message = sampleError?.message || "";
-          if (/Unknown column/i.test(message) || /1054/.test(message)) {
-            console.warn("[summary] Sample query omitted", {
-              campaign: campaign.id,
-              sql: sampleSql,
-              error: message,
-            });
-            return { rows: [], rowCount: 0 };
-          }
-          throw sampleError;
-        }
-      })(),
+      samplePromise,
     ]);
 
     res.json({
@@ -1807,6 +1861,7 @@ const buildLoginSeriesQuery = ({
   userId,
   userIp,
 }) => {
+  const needsUserJoin = Boolean(segment || userType);
   const conditions = [
     `(l.idmask IS NULL OR l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
   ];
@@ -1843,6 +1898,9 @@ const buildLoginSeriesQuery = ({
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const joinClause = needsUserJoin
+    ? "LEFT JOIN {db}.mc_users u ON u.idmask = l.idmask"
+    : "";
 
   const sql = `
     SELECT
@@ -1850,7 +1908,7 @@ const buildLoginSeriesQuery = ({
       COUNT(*) AS total_logins,
       COUNT(DISTINCT l.idmask) AS unique_login_users
     FROM {db}.mc_logins l
-    LEFT JOIN {db}.mc_users u ON u.idmask = l.idmask
+    ${joinClause}
     ${whereClause}
     GROUP BY activity_date
     ORDER BY activity_date;
@@ -1869,8 +1927,20 @@ const buildRedemptionSeriesQuery = ({
 }) => {
   const conditions = [
     `(r.idmask IS NULL OR r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
+    "r.date IS NOT NULL",
+    "r.date <> '0000-00-00 00:00:00'",
   ];
   const params = ["%Y-%m-%d"];
+
+  const validRedemptionCondition = [
+    "r.idmask IS NOT NULL",
+    "TRIM(r.idmask) <> ''",
+    `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.id_award IS NOT NULL",
+    "r.id_award <> 0",
+    "r.value IS NOT NULL",
+    "r.value > 0",
+  ].join(" AND ");
 
   if (loginType) {
     let loginTypeCondition = `
@@ -1915,15 +1985,22 @@ const buildRedemptionSeriesQuery = ({
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const needsUserJoin = Boolean(segment || userType);
+  const joinClause = needsUserJoin
+    ? "LEFT JOIN {db}.mc_users u ON u.idmask = r.idmask"
+    : "";
 
   const sql = `
     SELECT
       DATE_FORMAT(r.date, %s) AS activity_date,
-      COUNT(*) AS total_redemptions,
-      COUNT(DISTINCT r.idmask) AS unique_redeemers,
-      COALESCE(SUM(r.value), 0) AS redeemed_value
+      SUM(CASE WHEN ${validRedemptionCondition} THEN 1 ELSE 0 END) AS total_redemptions,
+      COUNT(DISTINCT CASE WHEN ${validRedemptionCondition} THEN r.idmask ELSE NULL END) AS unique_redeemers,
+      COALESCE(SUM(CASE WHEN ${validRedemptionCondition} THEN r.value ELSE 0 END), 0) AS redeemed_value,
+      COUNT(*) AS total_attempts,
+      COUNT(DISTINCT r.idmask) AS unique_attempt_users,
+      SUM(CASE WHEN r.idmask IS NULL OR TRIM(r.idmask) = '' THEN 1 ELSE 0 END) AS missing_idmask_attempts
     FROM {db}.mc_redemptions r
-    LEFT JOIN {db}.mc_users u ON u.idmask = r.idmask
+    ${joinClause}
     ${whereClause}
     GROUP BY activity_date
     ORDER BY activity_date;
@@ -1940,6 +2017,7 @@ const buildLoginTypeDistributionQuery = ({
   userId,
   userIp,
 }) => {
+  const needsUserJoin = Boolean(segment || userType);
   const conditions = [
     `(l.idmask IS NULL OR l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
   ];
@@ -1976,13 +2054,16 @@ const buildLoginTypeDistributionQuery = ({
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const joinClause = needsUserJoin
+    ? "LEFT JOIN {db}.mc_users u ON u.idmask = l.idmask"
+    : "";
 
   const sql = `
     SELECT
       COALESCE(CAST(l.type AS CHAR), 'Sin tipo') AS login_type,
       COUNT(*) AS total_logins
     FROM {db}.mc_logins l
-    LEFT JOIN {db}.mc_users u ON u.idmask = l.idmask
+    ${joinClause}
     ${whereClause}
     GROUP BY login_type
     ORDER BY total_logins DESC;
@@ -1992,6 +2073,7 @@ const buildLoginTypeDistributionQuery = ({
 };
 
 const buildLoginHeatmapQuery = ({ range, segment, userType, loginType, userId, userIp }) => {
+  const needsUserJoin = Boolean(segment || userType);
   const conditions = [
     `(l.idmask IS NULL OR l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
     "l.date IS NOT NULL",
@@ -2030,6 +2112,9 @@ const buildLoginHeatmapQuery = ({ range, segment, userType, loginType, userId, u
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const joinClause = needsUserJoin
+    ? "LEFT JOIN {db}.mc_users u ON u.idmask = l.idmask"
+    : "";
 
   const sql = `
     SELECT
@@ -2037,7 +2122,7 @@ const buildLoginHeatmapQuery = ({ range, segment, userType, loginType, userId, u
       DAYOFWEEK(l.date) AS day_of_week,
       COUNT(*) AS total_logins
     FROM {db}.mc_logins l
-    LEFT JOIN {db}.mc_users u ON u.idmask = l.idmask
+    ${joinClause}
     ${whereClause}
     GROUP BY hour_bucket, day_of_week
     ORDER BY day_of_week, hour_bucket;
@@ -2233,8 +2318,14 @@ const buildWeeklyAwardFunnelQuery = ({ range }) => {
 const buildWeeklyRedemptionFunnelQuery = ({ range }) => {
   const conditions = [
     "r.idmask IS NOT NULL",
+    "TRIM(r.idmask) <> ''",
     `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.id_award IS NOT NULL",
+    "r.id_award <> 0",
+    "r.value IS NOT NULL",
+    "r.value > 0",
     "r.date IS NOT NULL",
+    "r.date <> '0000-00-00 00:00:00'",
   ];
   const params = [WEEK_DATE_FORMAT, WEEK_DATE_FORMAT];
 
@@ -2316,6 +2407,7 @@ router.get("/:id/activity", async (req, res) => {
   const userType = normalizeSelectorValue(req.query.userType);
   const userId = normalizeSelectorValue(req.query.userId);
   const userIp = normalizeSelectorValue(req.query.userIp);
+  const includeFilters = req.query.includeFilters !== "0";
 
   const allowedCampaigns = req.allowedCampaigns;
   const allowedIdsSet = req.allowedCampaignIdsSet;
@@ -2350,6 +2442,7 @@ router.get("/:id/activity", async (req, res) => {
     const totals = {
       logins: 0,
       redemptions: 0,
+      redemptionAttempts: 0,
       redeemedValue: 0,
     };
     const loginTypesSet = new Set();
@@ -2416,8 +2509,8 @@ router.get("/:id/activity", async (req, res) => {
         ),
         runQuery(campaign.database, loginHeatmapQuery.sql, loginHeatmapQuery.params),
         collectLoginTypes(campaign.database),
-        collectSegments(campaign.database),
-        collectUserTypes(campaign.database),
+        includeFilters ? collectSegments(campaign.database) : Promise.resolve([]),
+        includeFilters ? collectUserTypes(campaign.database) : Promise.resolve([]),
       ]);
 
       mergeSeriesRows(aggregateMap, loginSeries.rows, {
@@ -2429,6 +2522,9 @@ router.get("/:id/activity", async (req, res) => {
         redemptionsCount: "total_redemptions",
         uniqueRedeemers: "unique_redeemers",
         redeemedValue: "redeemed_value",
+        redemptionAttemptsCount: "total_attempts",
+        uniqueAttemptRedeemers: "unique_attempt_users",
+        missingIdmaskAttempts: "missing_idmask_attempts",
       });
 
       for (const row of loginTypeDistributionResult.rows || []) {
@@ -2503,10 +2599,12 @@ router.get("/:id/activity", async (req, res) => {
       const entry = aggregateMap.get(date);
       const loginsCount = entry?.loginsCount ?? 0;
       const redemptionsCount = entry?.redemptionsCount ?? 0;
+      const redemptionAttemptsCount = entry?.redemptionAttemptsCount ?? 0;
       const redeemedValue = entry?.redeemedValue ?? 0;
 
       totals.logins += loginsCount;
       totals.redemptions += redemptionsCount;
+      totals.redemptionAttempts += redemptionAttemptsCount;
       totals.redeemedValue += redeemedValue;
 
       const conversionRate =
@@ -2517,7 +2615,10 @@ router.get("/:id/activity", async (req, res) => {
         loginsCount,
         uniqueLoginUsers: entry?.uniqueLoginUsers ?? 0,
         redemptionsCount,
+        redemptionAttemptsCount,
         uniqueRedeemers: entry?.uniqueRedeemers ?? 0,
+        uniqueAttemptRedeemers: entry?.uniqueAttemptRedeemers ?? 0,
+        missingIdmaskAttempts: entry?.missingIdmaskAttempts ?? 0,
         redeemedValue,
         conversionRate,
       };
@@ -2558,6 +2659,7 @@ router.get("/:id/activity", async (req, res) => {
       totals: {
         logins: totals.logins,
         redemptions: totals.redemptions,
+        redemptionAttempts: totals.redemptionAttempts,
         redeemedValue: totals.redeemedValue,
       },
       annotations,
@@ -3091,12 +3193,15 @@ router.get("/:id/login-security", async (req, res) => {
     for (const row of redemptionsByIpResult.rows || []) {
       const ipLabelRaw = typeof row.ip_label === "string" ? row.ip_label.trim() : "";
       const ip = ipLabelRaw || "Sin IP";
-      const totalRedemptions = toNumber(row.total_redemptions);
-      totalRedemptionEvents += totalRedemptions;
+      const redemptionAttempts = toNumber(row.total_redemptions);
+      totalRedemptionEvents += redemptionAttempts;
       redemptionIpMap.set(ip, {
         ip,
-        totalRedemptions,
-        uniqueRedeemers: toNumber(row.unique_redeemers),
+        redemptionAttempts,
+        uniqueAttemptRedeemers: toNumber(row.unique_redeemers),
+        validRedemptions: toNumber(row.valid_redemptions),
+        validUniqueRedeemers: toNumber(row.valid_unique_redeemers),
+        missingIdmaskAttempts: toNumber(row.missing_idmask),
         firstRedemptionAt: row.first_redemption_at || null,
         lastRedemptionAt: row.last_redemption_at || null,
         redeemedValue: toNumber(row.redeemed_value),
@@ -3127,8 +3232,9 @@ router.get("/:id/login-security", async (req, res) => {
         activeDays: toNumber(row.active_days),
         firstLoginAt: row.first_login_at || null,
         lastLoginAt: row.last_login_at || null,
-        redemptions: 0,
-        totalRedeemedValue: 0,
+        redemptionAttempts: 0,
+        validRedemptions: 0,
+        redeemedValue: 0,
         firstRedemptionAt: null,
         lastRedemptionAt: null,
       });
@@ -3141,8 +3247,9 @@ router.get("/:id/login-security", async (req, res) => {
       const existing = detailMap.get(key);
 
       if (existing) {
-        existing.redemptions = toNumber(row.redemption_count);
-        existing.totalRedeemedValue = toNumber(row.total_value);
+        existing.redemptionAttempts = toNumber(row.redemption_attempts);
+        existing.validRedemptions = toNumber(row.valid_redemptions);
+        existing.redeemedValue = toNumber(row.redeemed_value);
         existing.firstRedemptionAt = row.first_redemption_at || existing.firstRedemptionAt;
         existing.lastRedemptionAt = row.last_redemption_at || existing.lastRedemptionAt;
       } else {
@@ -3154,8 +3261,9 @@ router.get("/:id/login-security", async (req, res) => {
           activeDays: 0,
           firstLoginAt: null,
           lastLoginAt: null,
-          redemptions: toNumber(row.redemption_count),
-          totalRedeemedValue: toNumber(row.total_value),
+          redemptionAttempts: toNumber(row.redemption_attempts),
+          validRedemptions: toNumber(row.valid_redemptions),
+          redeemedValue: toNumber(row.redeemed_value),
           firstRedemptionAt: row.first_redemption_at || null,
           lastRedemptionAt: row.last_redemption_at || null,
         });
@@ -3164,9 +3272,13 @@ router.get("/:id/login-security", async (req, res) => {
 
     const detailEntries = Array.from(detailMap.values()).map((entry) => {
       const conversionRate =
-        entry.loginCount > 0 ? entry.redemptions / entry.loginCount : null;
+        entry.loginCount > 0
+          ? entry.redemptionAttempts / entry.loginCount
+          : null;
       const redemptionsPerActiveDay =
-        entry.activeDays > 0 ? entry.redemptions / entry.activeDays : null;
+        entry.activeDays > 0
+          ? entry.redemptionAttempts / entry.activeDays
+          : null;
       return {
         ...entry,
         conversionRate,
@@ -3180,7 +3292,7 @@ router.get("/:id/login-security", async (req, res) => {
         if (b.loginCount !== a.loginCount) {
           return b.loginCount - a.loginCount;
         }
-        return b.redemptions - a.redemptions;
+        return b.redemptionAttempts - a.redemptionAttempts;
       })
       .slice(0, 200);
 
@@ -3207,15 +3319,18 @@ router.get("/:id/login-security", async (req, res) => {
     const topRedemptionIps = (redemptionsByIpResult.rows || [])
       .slice(0, 15)
       .map((row) => {
-        const totalRedemptions = toNumber(row.total_redemptions);
+        const redemptionAttempts = toNumber(row.total_redemptions);
         return {
           ip: normalizeIpLabel(row.ip_label),
-          totalRedemptions,
-          uniqueRedeemers: toNumber(row.unique_redeemers),
+          redemptionAttempts,
+          uniqueAttemptRedeemers: toNumber(row.unique_redeemers),
+          validRedemptions: toNumber(row.valid_redemptions),
+          uniqueRedeemers: toNumber(row.valid_unique_redeemers),
+          missingIdmaskAttempts: toNumber(row.missing_idmask),
           redeemedValue: toNumber(row.redeemed_value),
           firstRedemptionAt: row.first_redemption_at || null,
           lastRedemptionAt: row.last_redemption_at || null,
-          share: totalRedemptionEvents > 0 ? totalRedemptions / totalRedemptionEvents : 0,
+          share: totalRedemptionEvents > 0 ? redemptionAttempts / totalRedemptionEvents : 0,
         };
       });
 
@@ -3238,8 +3353,11 @@ router.get("/:id/login-security", async (req, res) => {
       const redemptionInfo =
         redemptionIpMap.get(ip) ||
         {
-          totalRedemptions: 0,
-          uniqueRedeemers: 0,
+          redemptionAttempts: 0,
+          uniqueAttemptRedeemers: 0,
+          validRedemptions: 0,
+          validUniqueRedeemers: 0,
+          missingIdmaskAttempts: 0,
           firstRedemptionAt: null,
           lastRedemptionAt: null,
           redeemedValue: 0,
@@ -3247,15 +3365,16 @@ router.get("/:id/login-security", async (req, res) => {
       const details = detailsByIp.get(ip) || [];
       const conversionRate =
         loginInfo.totalLogins > 0
-          ? redemptionInfo.totalRedemptions / loginInfo.totalLogins
+          ? redemptionInfo.redemptionAttempts / loginInfo.totalLogins
           : 0;
       const dominantRedeemer = details.reduce(
-        (max, entry) => (entry.redemptions > max ? entry.redemptions : max),
+        (max, entry) =>
+          entry.redemptionAttempts > max ? entry.redemptionAttempts : max,
         0
       );
       const dominantShare =
-        redemptionInfo.totalRedemptions > 0
-          ? dominantRedeemer / redemptionInfo.totalRedemptions
+        redemptionInfo.redemptionAttempts > 0
+          ? dominantRedeemer / redemptionInfo.redemptionAttempts
           : 0;
       const redemptionSpanDays = diffInDays(
         parseDateTime(redemptionInfo.firstRedemptionAt),
@@ -3267,44 +3386,44 @@ router.get("/:id/login-security", async (req, res) => {
       );
       const redemptionsPerActiveDay =
         loginInfo.activeDays > 0
-          ? redemptionInfo.totalRedemptions / loginInfo.activeDays
+          ? redemptionInfo.redemptionAttempts / loginInfo.activeDays
           : null;
 
       const reasons = [];
 
-      if (redemptionInfo.totalRedemptions >= 12) {
-        reasons.push("Volumen elevado de redenciones para la IP.");
+      if (redemptionInfo.redemptionAttempts >= 12) {
+        reasons.push("Volumen elevado de intentos de redención para la IP.");
       }
-      if (redemptionInfo.totalRedemptions >= 5 && dominantShare >= 0.7) {
-        reasons.push("Canjes concentrados en un único idmask.");
+      if (redemptionInfo.redemptionAttempts >= 5 && dominantShare >= 0.7) {
+        reasons.push("Intentos concentrados en un único idmask.");
       }
       if (
-        redemptionInfo.totalRedemptions >= 5 &&
+        redemptionInfo.redemptionAttempts >= 5 &&
         redemptionSpanDays !== null &&
         redemptionSpanDays <= 2
       ) {
-        reasons.push("Múltiples canjes en una ventana temporal muy corta.");
+        reasons.push("Múltiples intentos en una ventana temporal muy corta.");
       }
       if (
         loginInfo.totalLogins >= 10 &&
-        redemptionInfo.totalRedemptions >= 5 &&
+        redemptionInfo.redemptionAttempts >= 5 &&
         conversionRate >= 0.6
       ) {
-        reasons.push("Conversión login→redención superior al 60%.");
+        reasons.push("Conversión login→intento superior al 60%.");
       }
       if (
         loginInfo.uniqueUsers >= 5 &&
-        redemptionInfo.uniqueRedeemers <= 2 &&
-        redemptionInfo.totalRedemptions >= 4
+        redemptionInfo.uniqueAttemptRedeemers <= 2 &&
+        redemptionInfo.redemptionAttempts >= 4
       ) {
         reasons.push("Muchos usuarios inician sesión pero pocos canjean.");
       }
       if (
-        redemptionInfo.totalRedemptions >= 4 &&
+        redemptionInfo.redemptionAttempts >= 4 &&
         redemptionsPerActiveDay !== null &&
         redemptionsPerActiveDay >= 2
       ) {
-        reasons.push("Promedio de redenciones por día activo mayor o igual a 2.");
+        reasons.push("Promedio de intentos de redención por día activo mayor o igual a 2.");
       }
 
       if (reasons.length === 0) {
@@ -3330,8 +3449,11 @@ router.get("/:id/login-security", async (req, res) => {
         ip,
         totalLogins: loginInfo.totalLogins,
         uniqueUsers: loginInfo.uniqueUsers,
-        totalRedemptions: redemptionInfo.totalRedemptions,
-        uniqueRedeemers: redemptionInfo.uniqueRedeemers,
+        redemptionAttempts: redemptionInfo.redemptionAttempts,
+        uniqueAttemptRedeemers: redemptionInfo.uniqueAttemptRedeemers,
+        validRedemptions: redemptionInfo.validRedemptions,
+        uniqueRedeemers: redemptionInfo.validUniqueRedeemers,
+        missingIdmaskAttempts: redemptionInfo.missingIdmaskAttempts,
         conversionRate,
         dominantRedeemerShare: dominantShare,
         redemptionSpanDays,
@@ -3347,7 +3469,7 @@ router.get("/:id/login-security", async (req, res) => {
 
     atypicalIps.sort((a, b) => {
       if (a.severity === b.severity) {
-        return b.totalRedemptions - a.totalRedemptions;
+        return b.redemptionAttempts - a.redemptionAttempts;
       }
       const order = { high: 0, medium: 1, low: 2 };
       return order[a.severity] - order[b.severity];

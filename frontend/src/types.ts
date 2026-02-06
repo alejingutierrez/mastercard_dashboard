@@ -55,7 +55,10 @@ export interface ActivityPoint {
   uniqueLoginUsers: number;
   redemptionsCount: number;
   redemptionsAvg7: number | null;
+  redemptionAttemptsCount: number;
   uniqueRedeemers: number;
+  uniqueAttemptRedeemers: number;
+  missingIdmaskAttempts: number;
   redeemedValue: number;
   conversionRate: number | null;
 }
@@ -63,6 +66,7 @@ export interface ActivityPoint {
 export interface ActivityTotals {
   logins: number;
   redemptions: number;
+  redemptionAttempts: number;
   redeemedValue: number;
 }
 
@@ -230,8 +234,11 @@ export interface LoginSecurityTopLoginIp {
 
 export interface LoginSecurityTopRedemptionIp {
   ip: string;
-  totalRedemptions: number;
+  redemptionAttempts: number;
+  uniqueAttemptRedeemers: number;
+  validRedemptions: number;
   uniqueRedeemers: number;
+  missingIdmaskAttempts: number;
   redeemedValue: number;
   firstRedemptionAt: string | null;
   lastRedemptionAt: string | null;
@@ -246,8 +253,9 @@ export interface LoginSecurityDetailRow {
   activeDays: number;
   firstLoginAt: string | null;
   lastLoginAt: string | null;
-  redemptions: number;
-  totalRedeemedValue: number;
+  redemptionAttempts: number;
+  validRedemptions: number;
+  redeemedValue: number;
   firstRedemptionAt: string | null;
   lastRedemptionAt: string | null;
   conversionRate: number | null;
@@ -258,8 +266,11 @@ export interface LoginSecurityAtypicalIp {
   ip: string;
   totalLogins: number;
   uniqueUsers: number;
-  totalRedemptions: number;
+  redemptionAttempts: number;
+  uniqueAttemptRedeemers: number;
+  validRedemptions: number;
   uniqueRedeemers: number;
+  missingIdmaskAttempts: number;
   conversionRate: number;
   dominantRedeemerShare: number;
   redemptionSpanDays: number | null;

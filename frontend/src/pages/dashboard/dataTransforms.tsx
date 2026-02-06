@@ -588,14 +588,21 @@ export const createLoginSecurityDetailColumns = (): ColumnsType<LoginSecurityDet
     render: (value: number) => formatNumber(value),
   },
   {
-    title: "Redenciones",
-    dataIndex: "redemptions",
-    key: "redemptions",
+    title: "Intentos",
+    dataIndex: "redemptionAttempts",
+    key: "redemptionAttempts",
     align: "right",
     render: (value: number) => formatNumber(value),
   },
   {
-    title: "Conversión",
+    title: "Válidas",
+    dataIndex: "validRedemptions",
+    key: "validRedemptions",
+    align: "right",
+    render: (value: number) => formatNumber(value),
+  },
+  {
+    title: "Intentos/Login",
     dataIndex: "conversionRate",
     key: "conversionRate",
     align: "right",
@@ -612,9 +619,9 @@ export const createLoginSecurityDetailColumns = (): ColumnsType<LoginSecurityDet
     render: (value: number) => formatNumber(value),
   },
   {
-    title: "Valor redimido",
-    dataIndex: "totalRedeemedValue",
-    key: "totalRedeemedValue",
+    title: "Valor redimido (válido)",
+    dataIndex: "redeemedValue",
+    key: "redeemedValue",
     align: "right",
     render: (value: number) => formatValue(value, "currency"),
   },
@@ -625,7 +632,7 @@ export const createLoginSecurityDetailColumns = (): ColumnsType<LoginSecurityDet
     render: (value: string | null) => formatDateTime(value),
   },
   {
-    title: "Última redención",
+    title: "Último intento",
     dataIndex: "lastRedemptionAt",
     key: "lastRedemptionAt",
     render: (value: string | null) => formatDateTime(value),
@@ -660,26 +667,30 @@ export const createLoginSecurityAtypicalColumns = (): ColumnsType<LoginSecurityA
     ),
   },
   {
-    title: "Redenciones / usuarios",
+    title: "Intentos / usuarios",
     key: "redemptions",
     render: (_: unknown, record) => (
       <Space direction="vertical" size={0}>
-        <Text strong>{formatNumber(record.totalRedemptions)}</Text>
+        <Text strong>{formatNumber(record.redemptionAttempts)}</Text>
         <Text type="secondary">
-          Usuarios: {formatNumber(record.uniqueRedeemers)}
+          Usuarios: {formatNumber(record.uniqueAttemptRedeemers)}
+        </Text>
+        <Text type="secondary">
+          Válidas: {formatNumber(record.validRedemptions)} · Valor:{" "}
+          {formatValue(record.redeemedValue, "currency")}
         </Text>
       </Space>
     ),
   },
   {
-    title: "Conversión",
+    title: "Intentos/Login",
     dataIndex: "conversionRate",
     key: "conversionRate",
     align: "right",
     render: (value: number) => formatPercentage(value),
   },
   {
-    title: "Redenciones/día activo",
+    title: "Intentos/día activo",
     dataIndex: "redemptionsPerActiveDay",
     key: "redemptionsPerActiveDay",
     align: "right",
@@ -703,7 +714,7 @@ export const createLoginSecurityAtypicalColumns = (): ColumnsType<LoginSecurityA
         <Space direction="vertical" size={0}>
           <Text>{rangeLabel}</Text>
           <Text type="secondary">
-            Login: {formatDays(record.loginSpanDays)} · Redención: {formatDays(
+            Login: {formatDays(record.loginSpanDays)} · Intento: {formatDays(
               record.redemptionSpanDays,
             )}
           </Text>

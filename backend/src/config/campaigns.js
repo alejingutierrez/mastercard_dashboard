@@ -46,16 +46,42 @@ const COMMON_METRICS = [
     sql: `SELECT COUNT(DISTINCT idmask) AS value
           FROM {db}.mc_redemptions
           WHERE idmask IS NOT NULL
-            AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL};`,
+            AND TRIM(idmask) <> ''
+            AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND id_award IS NOT NULL
+            AND id_award <> 0
+            AND value IS NOT NULL
+            AND value > 0
+            AND date IS NOT NULL
+            AND date <> '0000-00-00 00:00:00';`,
+    dateColumn: "{db}.mc_redemptions.date",
+    baseTable: "mc_redemptions",
+  },
+  {
+    key: "redemptionAttempts",
+    label: "Intentos de redención",
+    sql: `SELECT COUNT(*) AS value
+          FROM {db}.mc_redemptions
+          WHERE (idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL})
+            AND date IS NOT NULL
+            AND date <> '0000-00-00 00:00:00';`,
     dateColumn: "{db}.mc_redemptions.date",
     baseTable: "mc_redemptions",
   },
   {
     key: "totalRedemptions",
-    label: "Redenciones totales",
+    label: "Redenciones válidas",
     sql: `SELECT COUNT(*) AS value
           FROM {db}.mc_redemptions
-          WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL};`,
+          WHERE idmask IS NOT NULL
+            AND TRIM(idmask) <> ''
+            AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND id_award IS NOT NULL
+            AND id_award <> 0
+            AND value IS NOT NULL
+            AND value > 0
+            AND date IS NOT NULL
+            AND date <> '0000-00-00 00:00:00';`,
     dateColumn: "{db}.mc_redemptions.date",
     baseTable: "mc_redemptions",
   },
@@ -64,7 +90,15 @@ const COMMON_METRICS = [
     label: "Valor acumulado en redenciones",
     sql: `SELECT COALESCE(SUM(value), 0) AS value
           FROM {db}.mc_redemptions
-          WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL};`,
+          WHERE idmask IS NOT NULL
+            AND TRIM(idmask) <> ''
+            AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND id_award IS NOT NULL
+            AND id_award <> 0
+            AND value IS NOT NULL
+            AND value > 0
+            AND date IS NOT NULL
+            AND date <> '0000-00-00 00:00:00';`,
     dateColumn: "{db}.mc_redemptions.date",
     baseTable: "mc_redemptions",
   },
@@ -89,7 +123,15 @@ const COMMON_CHARTS = [
             ) AS average_ticket
           FROM {db}.mc_redemptions r
           LEFT JOIN {db}.mc_users u ON u.idmask = r.idmask
-          WHERE (r.idmask IS NULL OR r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})
+          WHERE r.idmask IS NOT NULL
+            AND TRIM(r.idmask) <> ''
+            AND r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND r.id_award IS NOT NULL
+            AND r.id_award <> 0
+            AND r.value IS NOT NULL
+            AND r.value > 0
+            AND r.date IS NOT NULL
+            AND r.date <> '0000-00-00 00:00:00'
           GROUP BY segment_label
           ORDER BY redeemed_value DESC, total_redemptions DESC
           LIMIT 10;`,

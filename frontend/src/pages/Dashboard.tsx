@@ -34,7 +34,7 @@ import {
   TeamOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import type { Dayjs } from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
 import type {
   ActivityResponse,
   Campaign,
@@ -80,6 +80,7 @@ import {
   createUserColumns,
   formatValue,
 } from "./dashboard/dataTransforms";
+import { exportExcel } from "../utils/exportExcel";
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -146,7 +147,8 @@ const KPI_DEFINITIONS: KpiDefinition[] = [
   { key: "totalUsers", label: "Usuarios totales" },
   { key: "totalLogins", label: "Logins totales" },
   { key: "usersWithLogin", label: "Usuarios con login" },
-  { key: "totalRedemptions", label: "Redenciones totales" },
+  { key: "redemptionAttempts", label: "Intentos de redención" },
+  { key: "totalRedemptions", label: "Redenciones válidas" },
   { key: "totalWinners", label: "Ganadores totales" },
   {
     key: "totalRedeemedValue",
@@ -202,6 +204,116 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   const mustChangePassword = currentUser.mustResetPassword;
   const userDisplayName = currentUser.name || currentUser.email;
   const userInitial = userDisplayName.charAt(0).toUpperCase();
+  const [exportingExcel, setExportingExcel] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return;
+    }
+
+    const storageKey = `dashboard_state_v1:${currentUser.id}`;
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        version?: number;
+        selectedMenu?: MenuKey;
+        collapsed?: boolean;
+        selectedCampaign?: string;
+        dateRange?: { from: string; to: string } | null;
+        loginType?: string | null;
+        userId?: string | null;
+        userIp?: string | null;
+      };
+
+      if (parsed?.version !== 1) {
+        return;
+      }
+
+      if (typeof parsed.collapsed === "boolean") {
+        setCollapsed(parsed.collapsed);
+      }
+
+      if (parsed.selectedMenu) {
+        const nextMenu =
+          currentUser.role !== "admin" && parsed.selectedMenu === "user-management"
+            ? "overview"
+            : parsed.selectedMenu;
+        setSelectedMenu(nextMenu);
+      }
+
+      if (typeof parsed.selectedCampaign === "string" && parsed.selectedCampaign.trim()) {
+        setSelectedCampaign(parsed.selectedCampaign.trim());
+      }
+
+      if (parsed.dateRange?.from && parsed.dateRange?.to) {
+        const start = dayjs(parsed.dateRange.from, "YYYY-MM-DD", true);
+        const end = dayjs(parsed.dateRange.to, "YYYY-MM-DD", true);
+        if (start.isValid() && end.isValid()) {
+          setDateRange([start, end]);
+        }
+      }
+
+      if (typeof parsed.loginType === "string" && parsed.loginType.trim()) {
+        setLoginType(parsed.loginType.trim());
+      }
+
+      if (typeof parsed.userId === "string" && parsed.userId.trim()) {
+        const trimmed = parsed.userId.trim();
+        setUserIdFilter(trimmed);
+        setUserIdInput(trimmed);
+      }
+
+      if (typeof parsed.userIp === "string" && parsed.userIp.trim()) {
+        const trimmed = parsed.userIp.trim();
+        setUserIpFilter(trimmed);
+        setUserIpInput(trimmed);
+      }
+    } catch (err) {
+      console.warn("[dashboard] Failed to restore persisted state", err);
+    }
+  }, [currentUser.id, currentUser.role]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return;
+    }
+
+    const storageKey = `dashboard_state_v1:${currentUser.id}`;
+    const payload = {
+      version: 1,
+      selectedMenu,
+      collapsed,
+      selectedCampaign,
+      dateRange: dateRange
+        ? {
+            from: dateRange[0].format("YYYY-MM-DD"),
+            to: dateRange[1].format("YYYY-MM-DD"),
+          }
+        : null,
+      loginType: loginType ?? null,
+      userId: userIdFilter ?? null,
+      userIp: userIpFilter ?? null,
+    };
+
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch (err) {
+      console.warn("[dashboard] Failed to persist state", err);
+    }
+  }, [
+    currentUser.id,
+    selectedMenu,
+    collapsed,
+    selectedCampaign,
+    dateRange,
+    loginType,
+    userIdFilter,
+    userIpFilter,
+  ]);
 
   const allCampaignIds = useMemo(
     () => campaigns.map((campaign) => campaign.id),
@@ -596,7 +708,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         setError(undefined);
         setLoadingSummary(true);
 
-        const filters: Record<string, string> = {};
+        const filters: Record<string, string> = { mode: "kpis" };
         if (dateRange) {
           filters.from = dateRange[0].format("YYYY-MM-DD");
           filters.to = dateRange[1].format("YYYY-MM-DD");
@@ -666,7 +778,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         setActivityError(undefined);
         setLoadingActivity(true);
 
-        const filters: Record<string, string> = {};
+        const filters: Record<string, string> = { includeFilters: "0" };
         if (dateRange) {
           filters.from = dateRange[0].format("YYYY-MM-DD");
           filters.to = dateRange[1].format("YYYY-MM-DD");
@@ -996,6 +1108,175 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     [],
   );
 
+  const handleExportCurrentView = async () => {
+    try {
+      setExportingExcel(true);
+
+      const timestamp = dayjs().format("YYYYMMDD-HHmm");
+      const campaignSlug = selectedCampaign ? selectedCampaign : "sin-campana";
+      const fileName = `dashboard-${selectedMenu}-${campaignSlug}-${timestamp}.xlsx`;
+
+      const filtersSheet = [
+        {
+          vista: selectedMenu,
+          campaignId: selectedCampaign ?? null,
+          from: dateRange ? dateRange[0].format("YYYY-MM-DD") : null,
+          to: dateRange ? dateRange[1].format("YYYY-MM-DD") : null,
+          loginType: loginType ?? null,
+          userId: userIdFilter ?? null,
+          userIp: userIpFilter ?? null,
+        },
+      ];
+
+      const sheets: { name: string; data: Record<string, unknown>[] }[] = [
+        { name: "Filtros", data: filtersSheet },
+      ];
+
+      if (summary?.metrics?.length) {
+        sheets.push({
+          name: "KPIs",
+          data: summary.metrics.map((metric) => ({
+            key: metric.key,
+            label: metric.label,
+            value: metric.value,
+          })),
+        });
+      }
+
+      if (selectedMenu === "overview") {
+        if (activity?.points?.length) {
+          sheets.push({
+            name: "Actividad",
+            data: activity.points as unknown as Record<string, unknown>[],
+          });
+        }
+        if (activity?.totals) {
+          sheets.push({
+            name: "Actividad Totales",
+            data: [activity.totals as unknown as Record<string, unknown>],
+          });
+        }
+        if (activity?.loginTypeBreakdown?.length) {
+          sheets.push({
+            name: "Login Types",
+            data: activity.loginTypeBreakdown as unknown as Record<string, unknown>[],
+          });
+        }
+        if (activity?.loginHeatmap?.length) {
+          sheets.push({
+            name: "Login Heatmap",
+            data: activity.loginHeatmap as unknown as Record<string, unknown>[],
+          });
+        }
+        if (activity?.annotations?.length) {
+          sheets.push({
+            name: "Hitos",
+            data: activity.annotations as unknown as Record<string, unknown>[],
+          });
+        }
+      } else if (selectedMenu === "redemptions") {
+        if (redemptionInsights?.amountDistribution?.length) {
+          sheets.push({
+            name: "Montos",
+            data: redemptionInsights.amountDistribution as unknown as Record<
+              string,
+              unknown
+            >[],
+          });
+        }
+        if (redemptionInsights?.merchantPie?.length) {
+          sheets.push({
+            name: "Pie Premios",
+            data: redemptionInsights.merchantPie as unknown as Record<string, unknown>[],
+          });
+        }
+        if (redemptionInsights?.merchantTotals?.length) {
+          sheets.push({
+            name: "Premios Totales",
+            data: redemptionInsights.merchantTotals as unknown as Record<
+              string,
+              unknown
+            >[],
+          });
+        }
+        if (redemptionInsights?.heatmap?.cells?.length) {
+          sheets.push({
+            name: "Heatmap",
+            data: redemptionInsights.heatmap.cells as unknown as Record<string, unknown>[],
+          });
+        }
+      } else if (selectedMenu === "login-security") {
+        if (loginSecurity?.topLoginIps?.length) {
+          sheets.push({
+            name: "Top Login IPs",
+            data: loginSecurity.topLoginIps as unknown as Record<string, unknown>[],
+          });
+        }
+        if (loginSecurity?.topRedemptionIps?.length) {
+          sheets.push({
+            name: "Top Red IPs",
+            data: loginSecurity.topRedemptionIps as unknown as Record<
+              string,
+              unknown
+            >[],
+          });
+        }
+        if (loginSecurity?.loginIpDetails?.length) {
+          sheets.push({
+            name: "Detalle IP",
+            data: loginSecurity.loginIpDetails as unknown as Record<
+              string,
+              unknown
+            >[],
+          });
+        }
+        if (loginSecurity?.atypicalIps?.length) {
+          sheets.push({
+            name: "IPs Atipicas",
+            data: loginSecurity.atypicalIps as unknown as Record<string, unknown>[],
+          });
+        }
+        if (loginSecurity?.twoFactorAdoption?.entries?.length) {
+          sheets.push({
+            name: "2FA",
+            data: loginSecurity.twoFactorAdoption.entries as unknown as Record<
+              string,
+              unknown
+            >[],
+          });
+        }
+        if (loginSecurity?.metadata) {
+          sheets.push({
+            name: "Metadata",
+            data: [loginSecurity.metadata as unknown as Record<string, unknown>],
+          });
+        }
+      } else if (selectedMenu === "user-management") {
+        if (users.length > 0) {
+          sheets.push({
+            name: "Usuarios",
+            data: users.map((user) => ({
+              ...user,
+              allowedCampaignIds: (user.allowedCampaignIds ?? []).join(", "),
+            })) as unknown as Record<string, unknown>[],
+          });
+        }
+      }
+
+      if (sheets.length <= 1) {
+        message.warning("No hay datos cargados para exportar.");
+        return;
+      }
+
+      await exportExcel({ fileName, sheets });
+    } catch (err) {
+      console.error(err);
+      message.error("No se pudo exportar el Excel.");
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   const handleUserIdSearch = (value: string) => {
     const trimmed = value.trim();
     setUserIdInput(trimmed);
@@ -1143,6 +1424,9 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
             {pageTitle}
           </Title>
           <Space align="center" size="large">
+            <Button onClick={handleExportCurrentView} loading={exportingExcel}>
+              Exportar Excel
+            </Button>
             <Dropdown
               menu={{ items: userMenuItems, onClick: handleUserMenuClick }}
               placement="bottomRight"
