@@ -8,6 +8,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
+  FilterOutlined,
   DeleteOutlined,
   EditOutlined,
 } from "@ant-design/icons";
@@ -557,14 +558,36 @@ export const buildUserTableData = (
     })
     .map((user) => ({ ...user, key: user.id }));
 
-export const createLoginSecurityDetailColumns = (): ColumnsType<LoginSecurityDetailRow> => [
+interface LoginSecurityDetailColumnsOptions {
+  onSelectIp?: (ip: string) => void;
+  onSelectUserId?: (idmask: string) => void;
+}
+
+export const createLoginSecurityDetailColumns = (
+  options: LoginSecurityDetailColumnsOptions = {},
+): ColumnsType<LoginSecurityDetailRow> => [
   {
     title: "IP",
     dataIndex: "ip",
     key: "ip",
     render: (value: string | null) =>
       value ? (
-        <Text code>{value}</Text>
+        <Space size={6}>
+          <Text code copyable={{ text: value }}>
+            {value}
+          </Text>
+          {options.onSelectIp ? (
+            <Tooltip title="Filtrar por esta IP">
+              <Button
+                type="text"
+                size="small"
+                className="table-cell-filter"
+                icon={<FilterOutlined />}
+                onClick={() => options.onSelectIp?.(value)}
+              />
+            </Tooltip>
+          ) : null}
+        </Space>
       ) : (
         <Text type="secondary">Sin IP</Text>
       ),
@@ -575,7 +598,20 @@ export const createLoginSecurityDetailColumns = (): ColumnsType<LoginSecurityDet
     key: "idmask",
     render: (value: string | null) =>
       value ? (
-        <Text>{value}</Text>
+        <Space size={6}>
+          <Text copyable={{ text: value }}>{value}</Text>
+          {options.onSelectUserId ? (
+            <Tooltip title="Filtrar por este usuario">
+              <Button
+                type="text"
+                size="small"
+                className="table-cell-filter"
+                icon={<FilterOutlined />}
+                onClick={() => options.onSelectUserId?.(value)}
+              />
+            </Tooltip>
+          ) : null}
+        </Space>
       ) : (
         <Text type="secondary">Sin idmask</Text>
       ),
@@ -639,7 +675,13 @@ export const createLoginSecurityDetailColumns = (): ColumnsType<LoginSecurityDet
   },
 ];
 
-export const createLoginSecurityAtypicalColumns = (): ColumnsType<LoginSecurityAtypicalIp> => [
+interface LoginSecurityAtypicalColumnsOptions {
+  onSelectIp?: (ip: string) => void;
+}
+
+export const createLoginSecurityAtypicalColumns = (
+  options: LoginSecurityAtypicalColumnsOptions = {},
+): ColumnsType<LoginSecurityAtypicalIp> => [
   {
     title: "Nivel",
     dataIndex: "severity",
@@ -652,7 +694,24 @@ export const createLoginSecurityAtypicalColumns = (): ColumnsType<LoginSecurityA
     title: "IP",
     dataIndex: "ip",
     key: "ip",
-    render: (value: string) => <Text code>{value}</Text>,
+    render: (value: string) => (
+      <Space size={6}>
+        <Text code copyable={{ text: value }}>
+          {value}
+        </Text>
+        {options.onSelectIp ? (
+          <Tooltip title="Filtrar por esta IP">
+            <Button
+              type="text"
+              size="small"
+              className="table-cell-filter"
+              icon={<FilterOutlined />}
+              onClick={() => options.onSelectIp?.(value)}
+            />
+          </Tooltip>
+        ) : null}
+      </Space>
+    ),
   },
   {
     title: "Logins / usuarios",

@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { message, Spin } from "antd";
+import { App as AntdApp, Spin } from "antd";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import type { LoginFormValues } from "./pages/Login";
 import { login as loginRequest, fetchCurrentUser } from "./api/auth";
 import { clearAuthToken, setAuthToken, TOKEN_STORAGE_KEY } from "./api/client";
+import { clearCampaignRequestCache } from "./api/campaigns";
 import type { DashboardUser } from "./types";
 
 const App = () => {
+  const { message } = AntdApp.useApp();
   const [currentUser, setCurrentUser] = useState<DashboardUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -38,13 +40,14 @@ const App = () => {
     };
 
     bootstrap();
-  }, []);
+  }, [message]);
 
   const handleLogin = async ({ email, password }: LoginFormValues) => {
     const { token, user } = await loginRequest({ email, password });
     setAuthToken(token);
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     setCurrentUser(user);
+    clearCampaignRequestCache();
     message.success(`Bienvenido, ${user.name || user.email}`);
     if (user.mustResetPassword) {
       message.warning(
@@ -56,6 +59,7 @@ const App = () => {
   const handleLogout = () => {
     clearAuthToken();
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    clearCampaignRequestCache();
     setCurrentUser(null);
     message.success("Sesión cerrada correctamente.");
   };

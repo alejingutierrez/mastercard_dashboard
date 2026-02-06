@@ -342,6 +342,7 @@ const RedemptionsSection = ({
                       pagination={false}
                       size="small"
                       scroll={{ y: 260 }}
+                      sticky
                     />
                   ) : (
                     <div className="activity-empty">

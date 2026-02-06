@@ -1,13 +1,16 @@
 import {
   Alert,
+  App as AntdApp,
   Avatar,
   Button,
   Card,
   Col,
   DatePicker,
+  Drawer,
   Dropdown,
   Empty,
   Form,
+  Grid,
   Input,
   Layout,
   Menu,
@@ -18,14 +21,18 @@ import {
   Spin,
   Statistic,
   Switch,
+  Tag,
+  Tooltip,
   Typography,
-  message,
 } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MenuProps } from "antd";
 import type { RangePickerProps } from "antd/es/date-picker";
 import {
   AppstoreOutlined,
+  DownloadOutlined,
+  InfoCircleOutlined,
+  MenuOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
@@ -49,6 +56,7 @@ import {
   fetchCampaignActivity,
   fetchCampaignRedemptionInsights,
   fetchCampaignLoginSecurity,
+  type SummaryFilters,
 } from "../api/campaigns";
 import { updateCurrentUserProfile } from "../api/auth";
 import { fetchUsers, createUser, updateUser, deleteUser } from "../api/users";
@@ -141,19 +149,45 @@ interface KpiDefinition {
   key: string;
   label: string;
   format?: KpiFormat;
+  help?: string;
 }
 
 const KPI_DEFINITIONS: KpiDefinition[] = [
-  { key: "totalUsers", label: "Usuarios totales" },
-  { key: "totalLogins", label: "Logins totales" },
-  { key: "usersWithLogin", label: "Usuarios con login" },
-  { key: "redemptionAttempts", label: "Intentos de redención" },
-  { key: "totalRedemptions", label: "Redenciones válidas" },
-  { key: "totalWinners", label: "Ganadores totales" },
+  {
+    key: "totalUsers",
+    label: "Usuarios totales",
+    help: "Usuarios únicos disponibles en el universo de la campaña (no necesariamente con actividad).",
+  },
+  {
+    key: "totalLogins",
+    label: "Logins totales",
+    help: "Total de eventos de login registrados para los filtros seleccionados.",
+  },
+  {
+    key: "usersWithLogin",
+    label: "Usuarios con login",
+    help: "Usuarios únicos que realizaron al menos un login.",
+  },
+  {
+    key: "redemptionAttempts",
+    label: "Intentos de redención",
+    help: "Total de intentos de redención (incluye intentos fallidos y sin idmask).",
+  },
+  {
+    key: "totalRedemptions",
+    label: "Redenciones válidas",
+    help: "Redenciones aprobadas o exitosas (excluye intentos fallidos).",
+  },
+  {
+    key: "totalWinners",
+    label: "Ganadores totales",
+    help: "Usuarios únicos con al menos una redención válida.",
+  },
   {
     key: "totalRedeemedValue",
     label: "Valor acumulado en redenciones",
     format: "currency",
+    help: "Suma del valor (COP) redimido en redenciones válidas.",
   },
 ];
 
@@ -164,8 +198,13 @@ const LOGIN_TYPE_OPTIONS = [
 ];
 
 const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
+  const { message } = AntdApp.useApp();
+  const screens = Grid.useBreakpoint();
+  const isDesktop =
+    screens.lg ?? (typeof window !== "undefined" ? window.innerWidth >= 992 : true);
   const [selectedMenu, setSelectedMenu] = useState<MenuKey>("overview");
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<string>();
@@ -205,6 +244,12 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   const userDisplayName = currentUser.name || currentUser.email;
   const userInitial = userDisplayName.charAt(0).toUpperCase();
   const [exportingExcel, setExportingExcel] = useState(false);
+
+  useEffect(() => {
+    if (isDesktop) {
+      setMobileNavOpen(false);
+    }
+  }, [isDesktop]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.localStorage) {
@@ -607,7 +652,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     } finally {
       setDeletingUserId(null);
     }
-  }, []);
+  }, [message]);
 
   const campaignOptions = useMemo(
     () => [
@@ -628,6 +673,24 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   );
 
   const defaultCampaignId = campaigns[0]?.id;
+
+  const sharedQueryFilters = useMemo<Omit<SummaryFilters, "mode">>(() => {
+    const filters: Omit<SummaryFilters, "mode"> = {};
+    if (dateRange) {
+      filters.from = dateRange[0].format("YYYY-MM-DD");
+      filters.to = dateRange[1].format("YYYY-MM-DD");
+    }
+    if (loginType) {
+      filters.loginType = loginType;
+    }
+    if (userIdFilter) {
+      filters.userId = userIdFilter;
+    }
+    if (userIpFilter) {
+      filters.userIp = userIpFilter;
+    }
+    return filters;
+  }, [dateRange, loginType, userIdFilter, userIpFilter]);
 
   const filtersAreActive = Boolean(
     (defaultCampaignId
@@ -653,6 +716,25 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         return "Dashboard";
     }
   }, [selectedMenu]);
+
+  const selectedCampaignLabel = useMemo(() => {
+    if (!selectedCampaign) {
+      return "";
+    }
+    if (selectedCampaign === "all") {
+      return "Todas las campañas";
+    }
+    return campaignNameMap.get(selectedCampaign) ?? selectedCampaign;
+  }, [campaignNameMap, selectedCampaign]);
+
+  const dateRangeLabel = useMemo(() => {
+    if (!dateRange) {
+      return "Todo el periodo";
+    }
+    return `${dateRange[0].format("DD/MM/YYYY")} – ${dateRange[1].format(
+      "DD/MM/YYYY",
+    )}`;
+  }, [dateRange]);
 
   const allowedCampaignIdsKey = useMemo(
     () => currentUser.allowedCampaignIds?.join("|") || "",
@@ -695,6 +777,13 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     let cancelled = false;
 
     const loadSummary = async () => {
+      if (selectedMenu === "user-management") {
+        if (!cancelled) {
+          setLoadingSummary(false);
+        }
+        return;
+      }
+
       if (!selectedCampaign || selectedCampaign === "all") {
         if (!cancelled) {
           setSummary(null);
@@ -708,23 +797,10 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         setError(undefined);
         setLoadingSummary(true);
 
-        const filters: Record<string, string> = { mode: "kpis" };
-        if (dateRange) {
-          filters.from = dateRange[0].format("YYYY-MM-DD");
-          filters.to = dateRange[1].format("YYYY-MM-DD");
-        }
-        if (loginType) {
-          filters.loginType = loginType;
-        }
-        if (userIdFilter) {
-          filters.userId = userIdFilter;
-        }
-        if (userIpFilter) {
-          filters.userIp = userIpFilter;
-        }
-
-        const summaryFilters =
-          Object.keys(filters).length > 0 ? filters : undefined;
+        const summaryFilters: SummaryFilters = {
+          ...sharedQueryFilters,
+          mode: "kpis",
+        };
 
         const data = await fetchCampaignSummary(
           selectedCampaign,
@@ -753,7 +829,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     return () => {
       cancelled = true;
     };
-  }, [selectedCampaign, dateRange, loginType, userIdFilter, userIpFilter]);
+  }, [selectedCampaign, selectedMenu, sharedQueryFilters]);
 
   useEffect(() => {
     let cancelled = false;
@@ -778,20 +854,10 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         setActivityError(undefined);
         setLoadingActivity(true);
 
-        const filters: Record<string, string> = { includeFilters: "0" };
-        if (dateRange) {
-          filters.from = dateRange[0].format("YYYY-MM-DD");
-          filters.to = dateRange[1].format("YYYY-MM-DD");
-        }
-        if (loginType) {
-          filters.loginType = loginType;
-        }
-        if (userIdFilter) {
-          filters.userId = userIdFilter;
-        }
-        if (userIpFilter) {
-          filters.userIp = userIpFilter;
-        }
+        const filters: Record<string, string> = {
+          includeFilters: "0",
+          ...sharedQueryFilters,
+        };
 
         const data = await fetchCampaignActivity(selectedCampaign, filters);
         if (cancelled) {
@@ -819,12 +885,42 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     };
   }, [
     selectedCampaign,
-    dateRange,
-    loginType,
-    userIdFilter,
-    userIpFilter,
     selectedMenu,
+    sharedQueryFilters,
   ]);
+
+  useEffect(() => {
+    if (!selectedCampaign || selectedCampaign === "all") {
+      return;
+    }
+    if (selectedMenu === "user-management") {
+      return;
+    }
+
+    // Prefetch other tabs to make navigation feel instant.
+    const timer = window.setTimeout(() => {
+      if (selectedMenu !== "overview") {
+        void fetchCampaignActivity(selectedCampaign, {
+          includeFilters: "0",
+          ...sharedQueryFilters,
+        }).catch(() => undefined);
+      }
+      if (selectedMenu !== "redemptions") {
+        void fetchCampaignRedemptionInsights(selectedCampaign, sharedQueryFilters).catch(
+          () => undefined,
+        );
+      }
+      if (selectedMenu !== "login-security") {
+        void fetchCampaignLoginSecurity(selectedCampaign, sharedQueryFilters).catch(
+          () => undefined,
+        );
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [selectedCampaign, selectedMenu, sharedQueryFilters]);
 
   useEffect(() => {
     let cancelled = false;
@@ -850,24 +946,9 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         setRedemptionError(undefined);
         setLoadingRedemptionInsights(true);
 
-        const filters: Record<string, string> = {};
-        if (dateRange) {
-          filters.from = dateRange[0].format("YYYY-MM-DD");
-          filters.to = dateRange[1].format("YYYY-MM-DD");
-        }
-        if (loginType) {
-          filters.loginType = loginType;
-        }
-        if (userIdFilter) {
-          filters.userId = userIdFilter;
-        }
-        if (userIpFilter) {
-          filters.userIp = userIpFilter;
-        }
-
         const data = await fetchCampaignRedemptionInsights(
           selectedCampaign,
-          filters,
+          sharedQueryFilters,
         );
         if (cancelled) {
           return;
@@ -896,10 +977,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   }, [
     selectedMenu,
     selectedCampaign,
-    dateRange,
-    loginType,
-    userIdFilter,
-    userIpFilter,
+    sharedQueryFilters,
   ]);
 
   useEffect(() => {
@@ -932,23 +1010,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         setLoginSecurityError(undefined);
         setLoadingLoginSecurity(true);
 
-        const filters: Record<string, string> = {};
-        if (dateRange) {
-          filters.from = dateRange[0].format("YYYY-MM-DD");
-          filters.to = dateRange[1].format("YYYY-MM-DD");
-        }
-        if (loginType) {
-          filters.loginType = loginType;
-        }
-        if (userIdFilter) {
-          filters.userId = userIdFilter;
-        }
-        if (userIpFilter) {
-          filters.userIp = userIpFilter;
-        }
-
-        const params = Object.keys(filters).length > 0 ? filters : undefined;
-        const data = await fetchCampaignLoginSecurity(selectedCampaign, params);
+        const data = await fetchCampaignLoginSecurity(selectedCampaign, sharedQueryFilters);
         if (cancelled) {
           return;
         }
@@ -975,10 +1037,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   }, [
     selectedMenu,
     selectedCampaign,
-    dateRange,
-    loginType,
-    userIdFilter,
-    userIpFilter,
+    sharedQueryFilters,
   ]);
 
   const metricsByKey = useMemo(
@@ -1010,6 +1069,58 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     [loginTypeLabelMap],
   );
 
+  const activeFilterTags = useMemo(() => {
+    const tags: { key: string; label: string; onClose: () => void }[] = [];
+
+    if (dateRange) {
+      tags.push({
+        key: "dateRange",
+        label: `Fechas: ${dateRangeLabel}`,
+        onClose: () => setDateRange(null),
+      });
+    }
+
+    if (loginType) {
+      const label = loginTypeLabelMap.get(loginType) ?? loginType;
+      tags.push({
+        key: "loginType",
+        label: `Login: ${label}`,
+        onClose: () => setLoginType(undefined),
+      });
+    }
+
+    if (userIdFilter) {
+      tags.push({
+        key: "userId",
+        label: `Usuario: ${userIdFilter}`,
+        onClose: () => {
+          setUserIdFilter(undefined);
+          setUserIdInput("");
+        },
+      });
+    }
+
+    if (userIpFilter) {
+      tags.push({
+        key: "userIp",
+        label: `IP: ${userIpFilter}`,
+        onClose: () => {
+          setUserIpFilter(undefined);
+          setUserIpInput("");
+        },
+      });
+    }
+
+    return tags;
+  }, [
+    dateRange,
+    dateRangeLabel,
+    loginType,
+    loginTypeLabelMap,
+    userIdFilter,
+    userIpFilter,
+  ]);
+
   const loginTypeDistribution = useMemo(
     () => buildLoginTypeDistribution(activity, loginTypeLabelMap),
     [activity, loginTypeLabelMap],
@@ -1040,20 +1151,135 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     [loginSecurity],
   );
 
+  const applyIpFilter = useCallback((ip: string) => {
+    const trimmed = ip.trim();
+    if (!trimmed) {
+      return;
+    }
+    setUserIpInput(trimmed);
+    setUserIpFilter(trimmed);
+  }, []);
+
+  const applyUserIdFilter = useCallback((idmask: string) => {
+    const trimmed = idmask.trim();
+    if (!trimmed) {
+      return;
+    }
+    setUserIdInput(trimmed);
+    setUserIdFilter(trimmed);
+  }, []);
+
+  const clearIpFilter = useCallback(() => {
+    setUserIpInput("");
+    setUserIpFilter(undefined);
+  }, []);
+
   const loginSecurityAtypicalRows = useMemo(
     () => buildLoginSecurityAtypicalRows(loginSecurity),
     [loginSecurity],
   );
 
   const loginSecurityDetailColumns = useMemo(
-    () => createLoginSecurityDetailColumns(),
-    [],
+    () =>
+      createLoginSecurityDetailColumns({
+        onSelectIp: applyIpFilter,
+        onSelectUserId: applyUserIdFilter,
+      }),
+    [applyIpFilter, applyUserIdFilter],
   );
 
   const loginSecurityAtypicalColumns = useMemo(
-    () => createLoginSecurityAtypicalColumns(),
-    [],
+    () =>
+      createLoginSecurityAtypicalColumns({
+        onSelectIp: applyIpFilter,
+      }),
+    [applyIpFilter],
   );
+
+  const loginSecurityIpSpotlight = useMemo(() => {
+    if (!loginSecurity || !userIpFilter) {
+      return null;
+    }
+
+    const ip = userIpFilter.trim();
+    if (!ip) {
+      return null;
+    }
+
+    const loginInfo =
+      loginSecurity.topLoginIps?.find((entry) => entry.ip === ip) ??
+      loginSecurity.topLoginIps?.[0] ??
+      null;
+    const redemptionInfo =
+      loginSecurity.topRedemptionIps?.find((entry) => entry.ip === ip) ??
+      loginSecurity.topRedemptionIps?.[0] ??
+      null;
+
+    const redemptionAttempts =
+      typeof redemptionInfo?.redemptionAttempts === "number"
+        ? redemptionInfo.redemptionAttempts
+        : 0;
+
+    const dominant = loginSecurityDetailRows.reduce(
+      (acc, row) => {
+        if (row.ip !== ip) {
+          return acc;
+        }
+        const attempts =
+          typeof row.redemptionAttempts === "number" ? row.redemptionAttempts : 0;
+        if (attempts <= (acc.attempts ?? 0)) {
+          return acc;
+        }
+        return {
+          idmask: row.idmask ?? null,
+          attempts,
+          valid:
+            typeof row.validRedemptions === "number" ? row.validRedemptions : 0,
+        };
+      },
+      { idmask: null as string | null, attempts: 0, valid: 0 },
+    );
+
+    const dominantShare =
+      redemptionAttempts > 0 ? dominant.attempts / redemptionAttempts : null;
+
+    return {
+      ip,
+      totalLogins:
+        typeof loginInfo?.totalLogins === "number" ? loginInfo.totalLogins : 0,
+      uniqueLoginUsers:
+        typeof loginInfo?.uniqueUsers === "number" ? loginInfo.uniqueUsers : 0,
+      redemptionAttempts,
+      uniqueAttemptRedeemers:
+        typeof redemptionInfo?.uniqueAttemptRedeemers === "number"
+          ? redemptionInfo.uniqueAttemptRedeemers
+          : 0,
+      validRedemptions:
+        typeof redemptionInfo?.validRedemptions === "number"
+          ? redemptionInfo.validRedemptions
+          : 0,
+      uniqueRedeemers:
+        typeof redemptionInfo?.uniqueRedeemers === "number"
+          ? redemptionInfo.uniqueRedeemers
+          : 0,
+      redeemedValue:
+        typeof redemptionInfo?.redeemedValue === "number"
+          ? redemptionInfo.redeemedValue
+          : 0,
+      firstActivityAt:
+        redemptionInfo?.firstRedemptionAt ??
+        loginInfo?.firstLoginAt ??
+        null,
+      lastActivityAt:
+        redemptionInfo?.lastRedemptionAt ??
+        loginInfo?.lastLoginAt ??
+        null,
+      dominantIdmask: dominant.idmask,
+      dominantAttempts: dominant.attempts,
+      dominantValid: dominant.valid,
+      dominantShare,
+    };
+  }, [loginSecurity, loginSecurityDetailRows, userIpFilter]);
 
   const userColumns = useMemo(
     () =>
@@ -1358,6 +1584,10 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
             detailRows={loginSecurityDetailRows}
             atypicalColumns={loginSecurityAtypicalColumns}
             atypicalRows={loginSecurityAtypicalRows}
+            activeIpFilter={userIpFilter}
+            onSelectIp={applyIpFilter}
+            onClearIpFilter={clearIpFilter}
+            ipSpotlight={loginSecurityIpSpotlight}
           />
         );
       case "user-management":
@@ -1375,57 +1605,131 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     }
   })();
 
-
   return (
     <Layout className="dashboard-layout">
-      <Sider
-        className={`dashboard-sider ${
-          collapsed ? "dashboard-sider--collapsed" : ""
-        }`}
-        width={220}
-        collapsedWidth={80}
-        theme="light"
-        collapsible
-        collapsed={collapsed}
-        trigger={null}
-        breakpoint="lg"
-      >
-        <div className="dashboard-sider__content">
-          <div className="dashboard-sider__brand">
-            <img
-              src="https://logos-world.net/wp-content/uploads/2020/09/Mastercard-Logo.png"
-              alt="Mastercard"
-            />
+      {isDesktop ? (
+        <Sider
+          className={`dashboard-sider ${
+            collapsed ? "dashboard-sider--collapsed" : ""
+          }`}
+          width={220}
+          collapsedWidth={80}
+          theme="light"
+          collapsible
+          collapsed={collapsed}
+          trigger={null}
+        >
+          <div className="dashboard-sider__content">
+            <div className="dashboard-sider__brand">
+              <img
+                src="https://logos-world.net/wp-content/uploads/2020/09/Mastercard-Logo.png"
+                alt="Mastercard"
+              />
+            </div>
+            <div className="dashboard-sider__menu">
+              <Menu
+                mode="inline"
+                items={menuItems}
+                selectedKeys={[selectedMenu]}
+                inlineCollapsed={collapsed}
+                onClick={({ key }) => setSelectedMenu(key as MenuKey)}
+              />
+            </div>
           </div>
-          <div className="dashboard-sider__menu">
-            <Menu
-              mode="inline"
-              items={menuItems}
-              selectedKeys={[selectedMenu]}
-              inlineCollapsed={collapsed}
-              onClick={({ key }) => setSelectedMenu(key as MenuKey)}
-            />
+        </Sider>
+      ) : (
+        <Drawer
+          className="dashboard-mobileNav"
+          placement="left"
+          open={mobileNavOpen}
+          onClose={() => setMobileNavOpen(false)}
+          width={300}
+          title={null}
+          closeIcon={null}
+          styles={{
+            header: { display: "none" },
+            body: { padding: 0 },
+          }}
+        >
+          <div className="dashboard-sider__content dashboard-sider__content--mobile">
+            <div className="dashboard-sider__brand dashboard-sider__brand--mobile">
+              <img
+                src="https://logos-world.net/wp-content/uploads/2020/09/Mastercard-Logo.png"
+                alt="Mastercard"
+              />
+            </div>
+            <div className="dashboard-sider__menu">
+              <Menu
+                mode="inline"
+                items={menuItems}
+                selectedKeys={[selectedMenu]}
+                onClick={({ key }) => {
+                  setSelectedMenu(key as MenuKey);
+                  setMobileNavOpen(false);
+                }}
+              />
+            </div>
           </div>
-          <div className="dashboard-sider__collapse">
-            <button
-              type="button"
-              className="collapse-trigger collapse-trigger--sider"
-              onClick={() => setCollapsed((prev) => !prev)}
-              aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
-            >
-              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            </button>
-          </div>
-        </div>
-      </Sider>
+        </Drawer>
+      )}
       <Layout>
         <Header className="dashboard-header">
-          <Title level={3} style={{ margin: 0 }}>
-            {pageTitle}
-          </Title>
-          <Space align="center" size="large">
-            <Button onClick={handleExportCurrentView} loading={exportingExcel}>
-              Exportar Excel
+          <div className="dashboard-header__left">
+            <Button
+              type="text"
+              className="dashboard-header__navTrigger"
+              icon={
+                isDesktop ? (
+                  collapsed ? (
+                    <MenuUnfoldOutlined />
+                  ) : (
+                    <MenuFoldOutlined />
+                  )
+                ) : (
+                  <MenuOutlined />
+                )
+              }
+              onClick={() => {
+                if (isDesktop) {
+                  setCollapsed((prev) => !prev);
+                  return;
+                }
+                setMobileNavOpen(true);
+              }}
+              aria-label={
+                isDesktop
+                  ? collapsed
+                    ? "Expandir menú"
+                    : "Colapsar menú"
+                  : "Abrir menú"
+              }
+            />
+            <div className="dashboard-header__titles">
+              <Title level={3} className="dashboard-header__title">
+                {pageTitle}
+              </Title>
+              {selectedMenu !== "user-management" && selectedCampaignLabel && (
+                <Text className="dashboard-header__subtitle">
+                  {selectedCampaignLabel} · {dateRangeLabel}
+                </Text>
+              )}
+            </div>
+          </div>
+
+          <Space
+            align="center"
+            size="middle"
+            className="dashboard-header__actions"
+          >
+            <Button
+              className="dashboard-header__export"
+              icon={<DownloadOutlined />}
+              onClick={handleExportCurrentView}
+              loading={exportingExcel}
+            >
+              <span className="dashboard-header__exportLabel">
+                Exportar Excel
+              </span>
             </Button>
             <Dropdown
               menu={{ items: userMenuItems, onClick: handleUserMenuClick }}
@@ -1440,7 +1744,11 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
               >
                 <Avatar
                   size={36}
-                  style={{ backgroundColor: "#f79e1b", color: "#111111", fontWeight: 600 }}
+                  style={{
+                    backgroundColor: "#f79e1b",
+                    color: "#111111",
+                    fontWeight: 700,
+                  }}
                 >
                   {userInitial}
                 </Avatar>
@@ -1462,22 +1770,37 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           </Space>
         </Header>
         <Content className="dashboard-content">
-          <Space direction="vertical" size="large" style={{ width: "100%" }}>
-            {selectedMenu !== "user-management" && (
-              <Card className="filter-card">
-                <Space
-                  direction="vertical"
-                  size="large"
-                  style={{ width: "100%" }}
-                >
-                  <Row gutter={[16, 16]} align="middle">
-                    <Col xs={24} md={12} lg={8}>
+          {selectedMenu !== "user-management" && (
+            <div className="dashboard-filterBar">
+              <div className="dashboard-container">
+                <Card className="filter-bar-card">
+                  <div className="filter-bar__top">
+                    <div className="filter-bar__title">
+                      <Text strong>Filtros</Text>
+                      <Text type="secondary" className="filter-bar__count">
+                        {activeFilterTags.length > 0
+                          ? `${activeFilterTags.length} activos`
+                          : "Sin filtros"}
+                      </Text>
+                    </div>
+                    <Button
+                      onClick={handleResetFilters}
+                      disabled={!filtersAreActive}
+                    >
+                      Borrar
+                    </Button>
+                  </div>
+
+                  <Row gutter={[12, 12]} align="middle">
+                    <Col xs={24} md={12} lg={10}>
                       <Space
                         direction="vertical"
-                        size="small"
+                        size={4}
                         style={{ width: "100%" }}
                       >
-                        <Text type="secondary">Campaña</Text>
+                        <Text type="secondary" className="filter-label">
+                          Campaña
+                        </Text>
                         <Select
                           style={{ width: "100%" }}
                           loading={loadingCampaigns}
@@ -1489,19 +1812,43 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                             }
                           }}
                           options={campaignOptions}
+                          showSearch
+                          optionFilterProp="label"
                         />
                       </Space>
                     </Col>
                     <Col xs={24} md={12} lg={8}>
                       <Space
                         direction="vertical"
-                        size="small"
+                        size={4}
                         style={{ width: "100%" }}
                       >
-                        <Text type="secondary">Tipo de login</Text>
+                        <Text type="secondary" className="filter-label">
+                          Rango de fechas
+                        </Text>
+                        <DatePicker.RangePicker
+                          allowEmpty={[true, true]}
+                          allowClear
+                          value={dateRange ?? null}
+                          onChange={handleDateRangeChange}
+                          style={{ width: "100%" }}
+                          format="DD/MM/YYYY"
+                          placeholder={["Fecha inicial", "Fecha final"]}
+                        />
+                      </Space>
+                    </Col>
+                    <Col xs={24} md={12} lg={6}>
+                      <Space
+                        direction="vertical"
+                        size={4}
+                        style={{ width: "100%" }}
+                      >
+                        <Text type="secondary" className="filter-label">
+                          Tipo de login
+                        </Text>
                         <Select
                           allowClear
-                          placeholder="Selecciona un tipo"
+                          placeholder="Todos"
                           style={{ width: "100%" }}
                           value={loginType ?? undefined}
                           options={loginTypeSelectOptions}
@@ -1515,33 +1862,18 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                         />
                       </Space>
                     </Col>
-                    <Col xs={24} md={12} lg={8}>
-                      <Space
-                        direction="vertical"
-                        size="small"
-                        style={{ width: "100%" }}
-                      >
-                        <Text type="secondary">Rango de fechas</Text>
-                        <DatePicker.RangePicker
-                          allowEmpty={[true, true]}
-                          allowClear
-                          value={dateRange ?? null}
-                          onChange={handleDateRangeChange}
-                          style={{ width: "100%" }}
-                          format="DD/MM/YYYY"
-                          placeholder={["Fecha inicial", "Fecha final"]}
-                        />
-                      </Space>
-                    </Col>
                   </Row>
-                  <Row gutter={[16, 16]} align="middle">
-                    <Col xs={24} md={12} lg={8}>
+
+                  <Row gutter={[12, 12]} align="middle" style={{ marginTop: 4 }}>
+                    <Col xs={24} md={12}>
                       <Space
                         direction="vertical"
-                        size="small"
+                        size={4}
                         style={{ width: "100%" }}
                       >
-                        <Text type="secondary">Id de usuario</Text>
+                        <Text type="secondary" className="filter-label">
+                          Id de usuario
+                        </Text>
                         <Input.Search
                           allowClear
                           placeholder="Busca por Id de usuario"
@@ -1557,13 +1889,15 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                         />
                       </Space>
                     </Col>
-                    <Col xs={24} md={12} lg={8}>
+                    <Col xs={24} md={12}>
                       <Space
                         direction="vertical"
-                        size="small"
+                        size={4}
                         style={{ width: "100%" }}
                       >
-                        <Text type="secondary">IP</Text>
+                        <Text type="secondary" className="filter-label">
+                          IP
+                        </Text>
                         <Input.Search
                           allowClear
                           placeholder="Busca por IP"
@@ -1579,82 +1913,104 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                         />
                       </Space>
                     </Col>
-                    <Col
-                      xs={24}
-                      md={12}
-                      lg={8}
-                      style={{
-                        display: "flex",
-                        justifyContent: "flex-end",
-                        alignItems: "flex-end",
-                      }}
-                    >
-                      <Button
-                        onClick={handleResetFilters}
-                        disabled={!filtersAreActive}
-                      >
-                        Borrar filtros
-                      </Button>
-                    </Col>
                   </Row>
-                </Space>
-              </Card>
-            )}
 
-            {error && <Alert type="error" message={error} showIcon />}
-
-            <Spin spinning={loadingSummary}>
-              {summary ? (
-                <Card className="kpi-wrapper">
-                  <Space
-                    direction="vertical"
-                    size="middle"
-                    style={{ width: "100%" }}
-                  >
-                    <div className="kpi-header">
-                      <Title level={4} className="kpi-title">
-                        Indicadores generales
-                      </Title>
-                      <div className="kpi-separator" />
+                  {activeFilterTags.length > 0 && (
+                    <div className="filter-bar__chips">
+                      {activeFilterTags.map((tag) => (
+                        <Tag
+                          key={tag.key}
+                          closable
+                          onClose={(event) => {
+                            event.preventDefault();
+                            tag.onClose();
+                          }}
+                        >
+                          {tag.label}
+                        </Tag>
+                      ))}
                     </div>
-                    <Row gutter={[16, 16]} wrap={false} className="kpi-row">
-                      {KPI_DEFINITIONS.map((definition) => {
-                        const metricValue = metricsByKey.get(
-                          definition.key,
-                        )?.value;
-                        return (
-                          <Col
-                            key={definition.key}
-                            className="kpi-col"
-                            flex="1 1 0"
-                          >
-                            <Card className="kpi-card">
-                              <Statistic
-                                title={definition.label}
-                                value={metricValue ?? 0}
-                                formatter={() =>
-                                  formatValue(metricValue, definition.format)
-                                }
-                              />
-                            </Card>
-                          </Col>
-                        );
-                      })}
-                    </Row>
-                  </Space>
+                  )}
                 </Card>
-              ) : (
-                !loadingSummary && (
-                  <Card>
-                    <Empty description="Selecciona una campaña para visualizar los KPIs." />
-                  </Card>
-                )
-              )}
-            </Spin>
+              </div>
+            </div>
+          )}
 
-            {mainSection}
+          <div className="dashboard-inner">
+            <div className="dashboard-container">
+              <div className="dashboard-stack">
+                {selectedMenu !== "user-management" &&
+                  error && <Alert type="error" message={error} showIcon />}
 
-            <Modal
+                {selectedMenu !== "user-management" && (
+                  <Spin spinning={loadingSummary}>
+                    {summary ? (
+                      <Card className="kpi-wrapper">
+                        <div className="kpi-header">
+                          <Title level={4} className="kpi-title">
+                            Indicadores generales
+                          </Title>
+                          <div className="kpi-separator" />
+                        </div>
+                        <Row gutter={[16, 16]} className="kpi-grid">
+                          {KPI_DEFINITIONS.map((definition, index) => {
+                            const metricValue = metricsByKey.get(
+                              definition.key,
+                            )?.value;
+                            const titleNode = (
+                              <span className="kpi-card__title">
+                                {definition.label}
+                                {definition.help && (
+                                  <Tooltip title={definition.help}>
+                                    <InfoCircleOutlined className="kpi-help" />
+                                  </Tooltip>
+                                )}
+                              </span>
+                            );
+
+                            return (
+                              <Col
+                                key={definition.key}
+                                xs={24}
+                                sm={12}
+                                lg={8}
+                                xl={6}
+                                className="kpi-col"
+                              >
+                                <Card
+                                  className={`kpi-card kpi-card--accent-${
+                                    index % 3
+                                  }`}
+                                >
+                                  <Statistic
+                                    title={titleNode}
+                                    value={metricValue ?? 0}
+                                    formatter={() =>
+                                      formatValue(metricValue, definition.format)
+                                    }
+                                  />
+                                </Card>
+                              </Col>
+                            );
+                          })}
+                        </Row>
+                      </Card>
+                    ) : (
+                      !loadingSummary && (
+                        <Card className="empty-card">
+                          <Empty description="Selecciona una campaña para visualizar los KPIs." />
+                        </Card>
+                      )
+                    )}
+                  </Spin>
+                )}
+
+                {mainSection}
+              </div>
+            </div>
+          </div>
+
+          <Modal
               title="Mi perfil"
               open={profileModalVisible}
               onCancel={mustChangePassword ? undefined : handleCloseProfileModal}
@@ -1787,172 +2143,164 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                     placeholder="Repite la nueva contraseña"
                   />
                 </Form.Item>
+                </Form>
+          </Modal>
+
+          {currentUser.role === "admin" && (
+            <Modal
+              title={userModalTitle}
+              open={userModalVisible}
+              onCancel={() => {
+                setUserModalVisible(false);
+                userForm.resetFields();
+              }}
+              onOk={handleSubmitUser}
+              confirmLoading={userModalSubmitting}
+              destroyOnHidden
+              maskClosable={false}
+              okText={isEditingUser ? "Guardar cambios" : "Crear usuario"}
+              cancelText="Cancelar"
+            >
+              <Form<UserFormValues> layout="vertical" form={userForm} preserve={false}>
+                <Form.Item
+                  label="Correo electrónico"
+                  name="email"
+                  rules={[
+                    { required: true, message: "El correo es obligatorio" },
+                    { type: "email", message: "Ingresa un correo válido" },
+                  ]}
+                >
+                  <Input
+                    type="email"
+                    autoComplete="email"
+                    placeholder="usuario@empresa.com"
+                    disabled={isEditingUser}
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Nombre completo"
+                  name="name"
+                  rules={[{ max: 100, message: "Máximo 100 caracteres" }]}
+                >
+                  <Input
+                    autoComplete="name"
+                    placeholder="Nombre visible en el dashboard"
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Rol"
+                  name="role"
+                  rules={[{ required: true, message: "Selecciona un rol" }]}
+                >
+                  <Select
+                    options={[
+                      { label: "Administrador", value: "admin" },
+                      { label: "Analista", value: "viewer" },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Campañas habilitadas"
+                  name="allowedCampaignIds"
+                  rules={[
+                    {
+                      validator: (_rule, value?: string[]) => {
+                        if (totalCampaignCount === 0) {
+                          return Promise.resolve();
+                        }
+                        if (!value || value.length === 0) {
+                          return Promise.reject(
+                            new Error("Selecciona al menos una campaña"),
+                          );
+                        }
+                        return Promise.resolve();
+                      },
+                    },
+                  ]}
+                >
+                  <Select
+                    mode="multiple"
+                    placeholder="Selecciona las campañas"
+                    options={userCampaignOptions}
+                    optionFilterProp="label"
+                    loading={loadingCampaigns}
+                    disabled={loadingCampaigns}
+                    maxTagCount="responsive"
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Contraseña"
+                  name="password"
+                  rules={[
+                    {
+                      validator: (_rule, value: string | undefined) => {
+                        if (!value || value.length === 0) {
+                          return isEditingUser
+                            ? Promise.resolve()
+                            : Promise.reject(
+                                new Error("Ingresa una contraseña segura"),
+                              );
+                        }
+                        if (value.length < MIN_PASSWORD_LENGTH) {
+                          return Promise.reject(
+                            new Error(
+                              `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`,
+                            ),
+                          );
+                        }
+                        return Promise.resolve();
+                      },
+                    },
+                  ]}
+                  extra={
+                    <Space size="small" wrap>
+                      <span>
+                        {isEditingUser
+                          ? "Deja este campo vacío para mantener la contraseña actual."
+                          : `Mínimo ${MIN_PASSWORD_LENGTH} caracteres.`}
+                      </span>
+                      <Button
+                        type="link"
+                        onClick={handleGenerateTempPassword}
+                        style={{ padding: 0 }}
+                      >
+                        Generar contraseña temporal
+                      </Button>
+                    </Space>
+                  }
+                >
+                  <Input.Password
+                    autoComplete="new-password"
+                    placeholder={
+                      isEditingUser
+                        ? "Deja vacío para no cambiarla"
+                        : "Introduce una contraseña"
+                    }
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="Requerir cambio de contraseña al iniciar"
+                  name="forcePasswordReset"
+                  valuePropName="checked"
+                >
+                  <Switch checkedChildren="Sí" unCheckedChildren="No" />
+                </Form.Item>
+                <Form.Item shouldUpdate noStyle>
+                  {() => {
+                    const requireReset = userForm.getFieldValue("forcePasswordReset");
+                    return requireReset ? (
+                      <Alert
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 16 }}
+                        message="La próxima vez que el usuario inicie sesión deberá definir una nueva contraseña."
+                      />
+                    ) : null;
+                  }}
+                </Form.Item>
               </Form>
             </Modal>
-
-            {currentUser.role === "admin" && (
-              <Modal
-                title={userModalTitle}
-                open={userModalVisible}
-                onCancel={() => {
-                  setUserModalVisible(false);
-                  userForm.resetFields();
-                }}
-                onOk={handleSubmitUser}
-                confirmLoading={userModalSubmitting}
-                destroyOnHidden
-                maskClosable={false}
-                okText={isEditingUser ? "Guardar cambios" : "Crear usuario"}
-                cancelText="Cancelar"
-              >
-                <Form<UserFormValues>
-                  layout="vertical"
-                  form={userForm}
-                  preserve={false}
-                >
-                  <Form.Item
-                    label="Correo electrónico"
-                    name="email"
-                    rules={[
-                      { required: true, message: "El correo es obligatorio" },
-                      { type: "email", message: "Ingresa un correo válido" },
-                    ]}
-                  >
-                    <Input
-                      type="email"
-                      autoComplete="email"
-                      placeholder="usuario@empresa.com"
-                      disabled={isEditingUser}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="Nombre completo"
-                    name="name"
-                    rules={[{ max: 100, message: "Máximo 100 caracteres" }]}
-                  >
-                    <Input
-                      autoComplete="name"
-                      placeholder="Nombre visible en el dashboard"
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="Rol"
-                    name="role"
-                    rules={[{ required: true, message: "Selecciona un rol" }]}
-                  >
-                    <Select
-                      options={[
-                        { label: "Administrador", value: "admin" },
-                        { label: "Analista", value: "viewer" },
-                      ]}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="Campañas habilitadas"
-                    name="allowedCampaignIds"
-                    rules={[
-                      {
-                        validator: (_rule, value?: string[]) => {
-                          if (totalCampaignCount === 0) {
-                            return Promise.resolve();
-                          }
-                          if (!value || value.length === 0) {
-                            return Promise.reject(
-                              new Error("Selecciona al menos una campaña"),
-                            );
-                          }
-                          return Promise.resolve();
-                        },
-                      },
-                    ]}
-                  >
-                    <Select
-                      mode="multiple"
-                      placeholder="Selecciona las campañas"
-                      options={userCampaignOptions}
-                      optionFilterProp="label"
-                      loading={loadingCampaigns}
-                      disabled={loadingCampaigns}
-                      maxTagCount="responsive"
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="Contraseña"
-                    name="password"
-                    rules={[
-                      {
-                        validator: (_rule, value: string | undefined) => {
-                          if (!value || value.length === 0) {
-                            return isEditingUser
-                              ? Promise.resolve()
-                              : Promise.reject(
-                                  new Error("Ingresa una contraseña segura"),
-                                );
-                          }
-                          if (value.length < MIN_PASSWORD_LENGTH) {
-                            return Promise.reject(
-                              new Error(
-                                `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`,
-                              ),
-                            );
-                          }
-                          return Promise.resolve();
-                        },
-                      },
-                    ]}
-                    extra={
-                      <Space size="small" wrap>
-                        <span>
-                          {isEditingUser
-                            ? "Deja este campo vacío para mantener la contraseña actual."
-                            : `Mínimo ${MIN_PASSWORD_LENGTH} caracteres.`}
-                        </span>
-                        <Button
-                          type="link"
-                          onClick={handleGenerateTempPassword}
-                          style={{ padding: 0 }}
-                        >
-                          Generar contraseña temporal
-                        </Button>
-                      </Space>
-                    }
-                  >
-                    <Input.Password
-                      autoComplete={
-                        isEditingUser ? "new-password" : "new-password"
-                      }
-                      placeholder={
-                        isEditingUser
-                          ? "Deja vacío para no cambiarla"
-                          : "Introduce una contraseña"
-                      }
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="Requerir cambio de contraseña al iniciar"
-                    name="forcePasswordReset"
-                    valuePropName="checked"
-                  >
-                    <Switch checkedChildren="Sí" unCheckedChildren="No" />
-                  </Form.Item>
-                  <Form.Item shouldUpdate noStyle>
-                    {() => {
-                      const requireReset =
-                        userForm.getFieldValue("forcePasswordReset");
-                      return requireReset ? (
-                        <Alert
-                          type="info"
-                          showIcon
-                          style={{ marginBottom: 16 }}
-                          message="La próxima vez que el usuario inicie sesión deberá definir una nueva contraseña."
-                        />
-                      ) : null;
-                    }}
-                  </Form.Item>
-                </Form>
-              </Modal>
-            )}
-          </Space>
+          )}
         </Content>
       </Layout>
     </Layout>

@@ -7,7 +7,7 @@ const sanitizeSheetName = (name: string, fallback = "Sheet"): string => {
   const raw = typeof name === "string" ? name.trim() : "";
   const base = raw.length > 0 ? raw : fallback;
   // Excel sheet name rules: max 31 chars, cannot include: \ / ? * [ ]
-  const cleaned = base.replace(/[\\/*?:\[\]]/g, " ").replace(/\s+/g, " ").trim();
+  const cleaned = base.replace(/[\\/*?:[\]]/g, " ").replace(/\s+/g, " ").trim();
   return (cleaned || fallback).slice(0, 31);
 };
 

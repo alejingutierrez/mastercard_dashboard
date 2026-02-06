@@ -1,11 +1,13 @@
 import {
   Alert,
+  Button,
   Card,
   Col,
   Empty,
   Row,
   Space,
   Spin,
+  Statistic,
   Table,
   Typography,
 } from "antd";
@@ -34,6 +36,23 @@ import type { TopIpEntry } from "./dataTransforms";
 
 const { Title, Text } = Typography;
 
+interface IpSpotlight {
+  ip: string;
+  totalLogins: number;
+  uniqueLoginUsers: number;
+  redemptionAttempts: number;
+  uniqueAttemptRedeemers: number;
+  validRedemptions: number;
+  uniqueRedeemers: number;
+  redeemedValue: number;
+  firstActivityAt: string | null;
+  lastActivityAt: string | null;
+  dominantIdmask: string | null;
+  dominantAttempts: number;
+  dominantValid: number;
+  dominantShare: number | null;
+}
+
 interface LoginSecuritySectionProps {
   selectedCampaign?: string;
   loginSecurityError?: string;
@@ -45,6 +64,10 @@ interface LoginSecuritySectionProps {
   detailRows: LoginSecurityDetailRow[];
   atypicalColumns: ColumnsType<LoginSecurityAtypicalIp>;
   atypicalRows: LoginSecurityAtypicalIp[];
+  activeIpFilter?: string;
+  onSelectIp?: (ip: string) => void;
+  onClearIpFilter?: () => void;
+  ipSpotlight: IpSpotlight | null;
 }
 
 const LoginSecuritySection = ({
@@ -58,6 +81,10 @@ const LoginSecuritySection = ({
   detailRows,
   atypicalColumns,
   atypicalRows,
+  activeIpFilter,
+  onSelectIp,
+  onClearIpFilter,
+  ipSpotlight,
 }: LoginSecuritySectionProps) => {
   if (selectedCampaign === "all") {
     return (
@@ -77,6 +104,110 @@ const LoginSecuritySection = ({
     <Spin spinning={loading}>
       {loginSecurity ? (
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
+          {ipSpotlight && (
+            <Card className="activity-card ip-spotlight">
+              <div className="activity-heading">
+                <div className="activity-header">
+                  <Title level={4} className="activity-title">
+                    Auditoría rápida de IP
+                  </Title>
+                  <div className="activity-separator" />
+                </div>
+                <Text type="secondary" className="activity-subtitle">
+                  IP <Text code copyable={{ text: ipSpotlight.ip }}>{ipSpotlight.ip}</Text>{" "}
+                  {activeIpFilter && onClearIpFilter ? (
+                    <>
+                      <span style={{ marginLeft: 10 }} />
+                      <Button size="small" onClick={onClearIpFilter}>
+                        Limpiar filtro IP
+                      </Button>
+                    </>
+                  ) : null}
+                </Text>
+              </div>
+
+              <div className="activity-body">
+                <Row gutter={[16, 16]}>
+                  <Col xs={12} md={6}>
+                    <Statistic
+                      title="Logins (total / usuarios)"
+                      value={`${formatNumber(ipSpotlight.totalLogins)} / ${formatNumber(
+                        ipSpotlight.uniqueLoginUsers,
+                      )}`}
+                    />
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Statistic
+                      title="Intentos (total / usuarios)"
+                      value={`${formatNumber(ipSpotlight.redemptionAttempts)} / ${formatNumber(
+                        ipSpotlight.uniqueAttemptRedeemers,
+                      )}`}
+                    />
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Statistic
+                      title="Válidas (total / usuarios)"
+                      value={`${formatNumber(ipSpotlight.validRedemptions)} / ${formatNumber(
+                        ipSpotlight.uniqueRedeemers,
+                      )}`}
+                    />
+                  </Col>
+                  <Col xs={12} md={6}>
+                    <Statistic
+                      title="Valor redimido (válido)"
+                      value={formatValue(ipSpotlight.redeemedValue, "currency")}
+                    />
+                  </Col>
+                </Row>
+
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} md={12}>
+                    <Text type="secondary">
+                      Ventana de actividad:{" "}
+                      <Text>
+                        {formatDateTime(ipSpotlight.firstActivityAt)} →{" "}
+                        {formatDateTime(ipSpotlight.lastActivityAt)}
+                      </Text>
+                    </Text>
+                  </Col>
+                  <Col xs={24} md={12} style={{ textAlign: "right" }}>
+                    {ipSpotlight.redemptionAttempts > ipSpotlight.validRedemptions && (
+                      <Text type="secondary">
+                        Intentos no válidos:{" "}
+                        <Text strong>
+                          {formatNumber(
+                            ipSpotlight.redemptionAttempts -
+                              ipSpotlight.validRedemptions,
+                          )}
+                        </Text>
+                      </Text>
+                    )}
+                  </Col>
+                </Row>
+
+                {ipSpotlight.dominantIdmask && ipSpotlight.dominantAttempts > 0 && (
+                  <div className="ip-spotlight__dominant">
+                    <Text type="secondary">
+                      Usuario con más intentos:{" "}
+                      <Text copyable={{ text: ipSpotlight.dominantIdmask }}>
+                        {ipSpotlight.dominantIdmask}
+                      </Text>{" "}
+                      · Intentos: <Text strong>{formatNumber(ipSpotlight.dominantAttempts)}</Text>{" "}
+                      · Válidas: <Text strong>{formatNumber(ipSpotlight.dominantValid)}</Text>
+                      {typeof ipSpotlight.dominantShare === "number" ? (
+                        <>
+                          {" "}
+                          · Participación:{" "}
+                          <Text strong>{formatPercentage(ipSpotlight.dominantShare, 1)}</Text>
+                        </>
+                      ) : null}
+                    </Text>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
           <Row gutter={[24, 32]} align="stretch">
             <Col xs={24} xl={12}>
               <Card className="activity-card">
@@ -142,6 +273,13 @@ const LoginSecuritySection = ({
                             name="Logins"
                             fill="#eb001b"
                             radius={[0, 8, 8, 0]}
+                            onClick={(event) => {
+                              const ip = (event as { payload?: { ip?: unknown } })
+                                ?.payload?.ip;
+                              if (typeof ip === "string" && ip.trim()) {
+                                onSelectIp?.(ip.trim());
+                              }
+                            }}
                           />
                         </ReBarChart>
                       </ResponsiveContainer>
@@ -231,6 +369,13 @@ const LoginSecuritySection = ({
                             name="Intentos"
                             fill="#f79e1b"
                             radius={[0, 8, 8, 0]}
+                            onClick={(event) => {
+                              const ip = (event as { payload?: { ip?: unknown } })
+                                ?.payload?.ip;
+                              if (typeof ip === "string" && ip.trim()) {
+                                onSelectIp?.(ip.trim());
+                              }
+                            }}
                           />
                         </ReBarChart>
                       </ResponsiveContainer>
@@ -265,6 +410,7 @@ const LoginSecuritySection = ({
                 size="small"
                 pagination={{ pageSize: 10, hideOnSinglePage: true }}
                 scroll={{ x: 1200 }}
+                sticky
                 locale={{
                   emptyText: (
                     <Empty description="No se encontraron combinaciones de IP e idmask para mostrar." />
@@ -293,6 +439,7 @@ const LoginSecuritySection = ({
                 rowKey="ip"
                 size="small"
                 pagination={{ pageSize: 8, hideOnSinglePage: true }}
+                sticky
                 locale={{
                   emptyText: (
                     <Empty description="No se detectaron patrones atípicos con los filtros actuales." />
