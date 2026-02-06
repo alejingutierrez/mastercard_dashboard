@@ -26,7 +26,12 @@ import {
 } from "recharts";
 import type { ColumnsType } from "antd/es/table";
 import type { RedemptionInsightsResponse } from "../../types";
-import { formatNumber, formatValue, getHeatmapColor } from "./dataTransforms";
+import {
+  formatNumber,
+  formatValue,
+  getHeatmapColor,
+  getHeatmapTextColor,
+} from "./dataTransforms";
 import type {
   RedemptionAmountChartDatum,
   RedemptionHeatmapData,
@@ -277,12 +282,11 @@ const RedemptionsSection = ({
                                 heatmapData.maxValue,
                                 heatmapData.minPositiveValue,
                               );
-                              const textColor =
-                                metrics.redemptions > 0 && heatmapData.maxValue > 0
-                                  ? metrics.redemptions / heatmapData.maxValue > 0.55
-                                    ? "#ffffff"
-                                    : "#111111"
-                                  : "#666666";
+                              const textColor = getHeatmapTextColor(
+                                metrics.redemptions,
+                                heatmapData.maxValue,
+                                heatmapData.minPositiveValue,
+                              );
                               return (
                                 <Tooltip
                                   key={`heatmap-cell-${key}`}

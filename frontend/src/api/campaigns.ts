@@ -3,7 +3,6 @@ import type {
   ActivityResponse,
   Campaign,
   CampaignSummaryResponse,
-  ConversionFunnelResponse,
   LoginSecurityResponse,
   RedemptionInsightsResponse,
 } from "../types";
@@ -68,19 +67,6 @@ export const fetchCampaignLoginSecurity = async (
 ): Promise<LoginSecurityResponse> => {
   const { data } = await apiClient.get<LoginSecurityResponse>(
     `/campaigns/${campaignId}/login-security`,
-    {
-      params: filters,
-    }
-  );
-  return data;
-};
-
-export const fetchCampaignConversionFunnel = async (
-  campaignId: string,
-  filters?: SummaryFilters
-): Promise<ConversionFunnelResponse> => {
-  const { data } = await apiClient.get<ConversionFunnelResponse>(
-    `/campaigns/${campaignId}/conversion-funnel`,
     {
       params: filters,
     }

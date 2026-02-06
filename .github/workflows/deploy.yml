@@ -1,0 +1,116 @@
+name: Deploy Dashboard
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-west-2
+  # API Gateway base URL used by the frontend (axios uses VITE_API_URL + '/api').
+  VITE_API_URL: https://bokxmm1e57.execute-api.us-west-2.amazonaws.com/prod
+  FRONTEND_BUCKET: mastercard-dashboard-20251023-ag
+  CLOUDFRONT_DISTRIBUTION_ID: E3L4347QGLQOSW
+  ECR_REPOSITORY: mastercard-dashboard-backend
+  ECS_CLUSTER: mastercard-dashboard-cluster
+  ECS_SERVICE: mastercard-dashboard-backend-service
+  ECS_TASK_FAMILY: mastercard-dashboard-backend-task
+
+jobs:
+  deploy:
+    name: Deploy frontend and backend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Determine AWS account ID
+        id: aws
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+          echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Sync frontend to S3
+        run: aws s3 sync frontend/dist "s3://${{ env.FRONTEND_BUCKET }}" --delete
+
+      - name: Invalidate CloudFront cache
+        run: aws cloudfront create-invalidation --distribution-id "${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
+
+      - name: Set image tag
+        id: image
+        run: echo "tag=backend-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Amazon ECR
+        run: |
+          ECR_REGISTRY=${{ steps.aws.outputs.account_id }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          echo "ECR_REGISTRY=$ECR_REGISTRY" >> "$GITHUB_ENV"
+
+      - name: Build and push backend image
+        run: |
+          IMAGE_URI=${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}
+          docker buildx build \
+            --platform linux/arm64 \
+            --tag "$IMAGE_URI" \
+            --push \
+            backend
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+
+      - name: Prepare task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "${{ env.ECS_TASK_FAMILY }}" \
+            --query 'taskDefinition' > taskdef.json
+
+          cat taskdef.json \
+            | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)' \
+            | jq --arg IMAGE "$IMAGE_URI" '.containerDefinitions[0].image = $IMAGE' \
+            > taskdef-updated.json
+
+      - name: Register new task definition
+        id: taskdef
+        run: |
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://taskdef-updated.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "task_def_arn=$NEW_TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy backend service
+        run: |
+          aws ecs update-service \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --service "${{ env.ECS_SERVICE }}" \
+            --task-definition "${{ steps.taskdef.outputs.task_def_arn }}" \
+            --force-new-deployment
+          aws ecs wait services-stable \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --services "${{ env.ECS_SERVICE }}"

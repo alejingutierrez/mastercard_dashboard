@@ -1,6 +1,5 @@
 require("dotenv").config();
 const express = require("express");
-const cors = require("cors");
 const campaignsRouter = require("./routes/campaigns");
 const authRouter = require("./routes/auth");
 const usersRouter = require("./routes/users");
@@ -12,13 +11,53 @@ const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+const allowedOriginsSet = new Set(allowedOrigins);
+if (allowedOriginsSet.size > 0) {
+  console.log(
+    "[cors] Orígenes permitidos:",
+    Array.from(allowedOriginsSet).join(", ")
+  );
+}
 
-app.use(
-  cors({
-    origin: allowedOrigins.length > 0 ? allowedOrigins : undefined,
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const hasAllowedOrigins = allowedOriginsSet.size > 0;
+  const isAllowed =
+    !hasAllowedOrigins || !origin || allowedOriginsSet.has(origin);
+
+  if (origin) {
+    console.log(
+      `[cors] Origin recibido: "${origin}" -> ${
+        isAllowed ? "autorizado" : "denegado"
+      }`
+    );
+  }
+
+  if (isAllowed) {
+    if (origin) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+    }
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization"
+    );
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS"
+    );
+    res.setHeader("Access-Control-Expose-Headers", "X-Dashboard-Token");
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
+    }
+    return next();
+  }
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(403);
+  }
+  return res.status(403).json({ error: "Origen no permitido" });
+});
 app.use(express.json());
 
 app.get("/health", (_req, res) => {

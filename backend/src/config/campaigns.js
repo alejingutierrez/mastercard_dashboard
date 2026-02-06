@@ -175,6 +175,58 @@ const CAMPAIGNS = [
                 WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
                 LIMIT 50;`,
   },
+  {
+    id: "guayaquil-5step",
+    name: "Guayaquil 5 Step",
+    database: "dentsu_mastercard_guayaquil_5s_3",
+    description:
+      "Campaña Banco de Guayaquil 5 Step. Indicadores generales de usuarios, logins y redenciones.",
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
+  {
+    id: "tuya-ola-5",
+    name: "Tuya Ola 5",
+    database: "dentsu_mastercard_tuya_ola_5",
+    description:
+      "Campaña Tuya Ola 5. Incluye indicadores generales de usuarios, logins y redenciones.",
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
+  {
+    id: "pacifico-5s-4",
+    name: "Pacífico 5S 4",
+    database: "dentsu_mastercard_pacifico_5s_4",
+    description:
+      "Campaña Pacífico 5S 4. Sigue las mismas métricas agregadas del resto del dashboard.",
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, award_1, challenge_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
+  {
+    id: "avvillas-combo-playero",
+    name: "AV Villas Combo Playero",
+    database: "dentsu_mastercard_avvillas_combo_playero",
+    description:
+      "Campaña AV Villas Combo Playero. Panel con KPIs de usuarios, logins y redenciones.",
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
 ];
 
 const getCampaignById = (id) => CAMPAIGNS.find((campaign) => campaign.id === id);

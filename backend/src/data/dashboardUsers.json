@@ -15,7 +15,10 @@
       "debitazo-6",
       "davivienda-afluentes-3",
       "pacifico-sag-5",
-      "pichincha"
+      "pichincha",
+      "tuya-ola-5",
+      "pacifico-5s-4",
+      "avvillas-combo-playero"
     ],
     "mustResetPassword": false
   },
@@ -30,7 +33,15 @@
     "createdAt": "2025-10-22T00:49:26.453Z",
     "updatedAt": "2025-10-22T00:50:01.277Z",
     "allowedCampaignIds": [
-      "pichincha"
+      "debitazo-5",
+      "bogota-uso-10",
+      "debitazo-6",
+      "davivienda-afluentes-3",
+      "pacifico-sag-5",
+      "pichincha",
+      "tuya-ola-5",
+      "pacifico-5s-4",
+      "avvillas-combo-playero"
     ],
     "mustResetPassword": false
   },
@@ -46,8 +57,14 @@
     "updatedAt": "2025-10-23T00:08:18.658Z",
     "allowedCampaignIds": [
       "debitazo-5",
+      "bogota-uso-10",
       "debitazo-6",
-      "davivienda-afluentes-3"
+      "davivienda-afluentes-3",
+      "pacifico-sag-5",
+      "pichincha",
+      "tuya-ola-5",
+      "pacifico-5s-4",
+      "avvillas-combo-playero"
     ],
     "mustResetPassword": false
   }

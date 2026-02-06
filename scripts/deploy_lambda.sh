@@ -26,6 +26,10 @@ if [[ -n "$DB_NAME" ]]; then
   ENV_VARS="$ENV_VARS,DB_NAME=$DB_NAME"
 fi
 
+if [[ -n "${DB_USERNAME:-}" && -n "${DB_PASSWORD:-}" ]]; then
+  ENV_VARS="$ENV_VARS,DB_USERNAME=$DB_USERNAME,DB_PASSWORD=$DB_PASSWORD"
+fi
+
 if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
   echo "Updating existing function $LAMBDA_FUNCTION_NAME..."
   aws lambda update-function-code \

@@ -173,6 +173,31 @@ const extractQueryTail = (sql) => {
   };
 };
 
+const CLAUSE_BOUNDARY_PATTERN =
+  /\b(GROUP\s+BY|HAVING|WINDOW|QUALIFY|ORDER\s+BY|LIMIT|OFFSET|FETCH|FOR\s+UPDATE|LOCK|UNION|EXCEPT|INTERSECT)\b/i;
+
+const findClauseBoundaryIndex = (statement, startIndex = 0) => {
+  const segment = statement.slice(startIndex);
+  const match = CLAUSE_BOUNDARY_PATTERN.exec(segment);
+  if (!match) {
+    return -1;
+  }
+  return startIndex + match.index;
+};
+
+const appendWithSpacing = (left, right) => {
+  if (!right) {
+    return left;
+  }
+  if (!left) {
+    return right;
+  }
+  if (/\s$/.test(left) || /^\s/.test(right)) {
+    return `${left}${right}`;
+  }
+  return `${left} ${right}`;
+};
+
 const buildLoginFilterSubquery = ({ filters, range, includeLoginType, includeUserIp }) => {
   const conditions = [];
   const params = [];
@@ -281,16 +306,36 @@ const applyFiltersToSql = ({
     : trimmedSql;
 
   const { core, tail } = extractQueryTail(sanitizedSql);
-  const hasWhere = /\bWHERE\b/i.test(core);
+  const conditionsClause = additionalConditions.join(" AND ");
+  const whereMatch = /\bWHERE\b/i.exec(core);
   let nextSql;
 
-  if (hasWhere) {
-    const whereIndex = core.toUpperCase().indexOf("WHERE");
-    const beforeWhere = core.slice(0, whereIndex + 5);
-    const whereBody = core.slice(whereIndex + 5).trim();
-    nextSql = `${beforeWhere} (${whereBody}) AND ${additionalConditions.join(" AND ")}`;
+  if (whereMatch) {
+    const whereStart = whereMatch.index;
+    const whereBodyStart = whereStart + whereMatch[0].length;
+    const clauseBoundaryIndex = findClauseBoundaryIndex(core, whereBodyStart);
+    const beforeWhere = core.slice(0, whereBodyStart);
+    const rawWhereBody = core.slice(
+      whereBodyStart,
+      clauseBoundaryIndex === -1 ? core.length : clauseBoundaryIndex
+    );
+    const afterWhere = clauseBoundaryIndex === -1 ? "" : core.slice(clauseBoundaryIndex);
+    const trimmedWhereBody = rawWhereBody.trim();
+    const augmentedWhere = trimmedWhereBody
+      ? ` (${trimmedWhereBody}) AND ${conditionsClause}`
+      : ` ${conditionsClause}`;
+    const prefix = `${beforeWhere}${augmentedWhere}`;
+    nextSql = appendWithSpacing(prefix, afterWhere);
   } else {
-    nextSql = `${core} WHERE ${additionalConditions.join(" AND ")}`;
+    const boundaryIndex = findClauseBoundaryIndex(core, 0);
+    if (boundaryIndex === -1) {
+      nextSql = `${core}\nWHERE ${conditionsClause}`;
+    } else {
+      const beforeBoundary = core.slice(0, boundaryIndex);
+      const afterBoundary = core.slice(boundaryIndex);
+      const withWhere = `${beforeBoundary}\nWHERE ${conditionsClause}`;
+      nextSql = appendWithSpacing(withWhere, afterBoundary);
+    }
   }
 
   const finalSql = `${nextSql}${tail ? ` ${tail}` : ""};`;
@@ -1472,11 +1517,24 @@ router.get("/:id/summary", async (req, res) => {
           range,
         });
 
-        const result = await runQuery(campaign.database, sampleSql, sampleParams);
-        return {
-          rows: result.rows,
-          rowCount: result.rowCount,
-        };
+        try {
+          const result = await runQuery(campaign.database, sampleSql, sampleParams);
+          return {
+            rows: result.rows,
+            rowCount: result.rowCount,
+          };
+        } catch (sampleError) {
+          const message = sampleError?.message || "";
+          if (/Unknown column/i.test(message) || /1054/.test(message)) {
+            console.warn("[summary] Sample query omitted", {
+              campaign: campaign.id,
+              sql: sampleSql,
+              error: message,
+            });
+            return { rows: [], rowCount: 0 };
+          }
+          throw sampleError;
+        }
       })(),
     ]);
 

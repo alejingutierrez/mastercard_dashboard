@@ -17,6 +17,50 @@ const sanitizeSql = (database, sqlTemplate) => {
   return sqlTemplate.replace(/\{db\}/g, database);
 };
 
+const escapePercentLiterals = (statement) => {
+  let result = "";
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+
+  for (let i = 0; i < statement.length; i += 1) {
+    const char = statement[i];
+
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      result += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === "'" && !inDouble) {
+      inSingle = !inSingle;
+      result += char;
+      continue;
+    }
+
+    if (char === '"' && !inSingle) {
+      inDouble = !inDouble;
+      result += char;
+      continue;
+    }
+
+    if ((inSingle || inDouble) && char === "%") {
+      result += "%%";
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result;
+};
+
 const invokeLambda = async (payload) => {
   const command = new InvokeCommand({
     FunctionName: LAMBDA_NAME,
@@ -41,11 +85,12 @@ const invokeLambda = async (payload) => {
 
 const runQuery = async (database, sqlTemplate, parameters = []) => {
   const sql = sanitizeSql(database, sqlTemplate);
+  const hasParameters = parameters.length > 0;
   const payload = {
-    sql,
+    sql: hasParameters ? escapePercentLiterals(sql) : sql,
   };
 
-  if (parameters.length > 0) {
+  if (hasParameters) {
     payload.parameters = parameters;
   }
 

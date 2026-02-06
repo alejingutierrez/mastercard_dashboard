@@ -34,3 +34,7 @@ pnpm-debug.log*
 # Generated lambdas/packages
 *.zip
 dist/*
+
+# Local deploy artifacts (may contain secrets)
+taskdef*.json
+cf-config*.json

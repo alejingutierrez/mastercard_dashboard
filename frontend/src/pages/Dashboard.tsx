@@ -39,7 +39,6 @@ import type {
   ActivityResponse,
   Campaign,
   CampaignSummaryResponse,
-  ConversionFunnelResponse,
   LoginSecurityResponse,
   RedemptionInsightsResponse,
   DashboardUser,
@@ -50,12 +49,10 @@ import {
   fetchCampaignActivity,
   fetchCampaignRedemptionInsights,
   fetchCampaignLoginSecurity,
-  fetchCampaignConversionFunnel,
 } from "../api/campaigns";
 import { updateCurrentUserProfile } from "../api/auth";
 import { fetchUsers, createUser, updateUser, deleteUser } from "../api/users";
 import ActivitySection from "./dashboard/ActivitySection";
-import ConversionFunnelSection from "./dashboard/ConversionFunnelSection";
 import LoginSecuritySection from "./dashboard/LoginSecuritySection";
 import RedemptionsSection from "./dashboard/RedemptionsSection";
 import UserManagementSection from "./dashboard/UserManagementSection";
@@ -64,7 +61,6 @@ import {
   ROLE_LABELS,
   buildActivityDataset,
   buildActivityWithCumulative,
-  buildConversionFunnelDataset,
   buildLoginHeatmapData,
   buildLoginSecurityAtypicalRows,
   buildLoginSecurityDetailRows,
@@ -76,12 +72,8 @@ import {
   buildRedemptionAmountChartData,
   buildRedemptionHeatmapData,
   buildRedemptionTableData,
-  buildSegmentRedemptionChartData,
-  buildTwoFactorHeatmapData,
   buildUserTableData,
   calculateActivityAxisExtents,
-  calculateConversionFunnelAxisMax,
-  calculateSegmentRedemptionAxisExtents,
   createLoginSecurityAtypicalColumns,
   createLoginSecurityDetailColumns,
   createRedemptionTableColumns,
@@ -163,8 +155,6 @@ const KPI_DEFINITIONS: KpiDefinition[] = [
   },
 ];
 
-const SEGMENT_REDEMPTION_CHART_KEY = "segmentRedemptionBreakdown";
-
 const LOGIN_TYPE_OPTIONS = [
   { value: "0", label: "Login no exitoso (0)" },
   { value: "1", label: "Login exitoso (1)" },
@@ -194,12 +184,6 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   const [loadingRedemptionInsights, setLoadingRedemptionInsights] =
     useState(false);
   const [redemptionError, setRedemptionError] = useState<string>();
-  const [conversionFunnel, setConversionFunnel] =
-    useState<ConversionFunnelResponse | null>(null);
-  const [loadingConversionFunnel, setLoadingConversionFunnel] =
-    useState(false);
-  const [conversionFunnelError, setConversionFunnelError] =
-    useState<string>();
   const [loginSecurity, setLoginSecurity] =
     useState<LoginSecurityResponse | null>(null);
   const [loadingLoginSecurity, setLoadingLoginSecurity] = useState(false);
@@ -733,84 +717,6 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   useEffect(() => {
     let cancelled = false;
 
-    const loadConversionFunnel = async () => {
-      if (selectedMenu !== "overview") {
-        if (!cancelled) {
-          setLoadingConversionFunnel(false);
-        }
-        return;
-      }
-
-      if (!selectedCampaign) {
-        if (!cancelled) {
-          setConversionFunnel(null);
-          setConversionFunnelError(undefined);
-          setLoadingConversionFunnel(false);
-        }
-        return;
-      }
-
-      try {
-        setConversionFunnelError(undefined);
-        setLoadingConversionFunnel(true);
-
-        const filters: Record<string, string> = {};
-        if (dateRange) {
-          filters.from = dateRange[0].format("YYYY-MM-DD");
-          filters.to = dateRange[1].format("YYYY-MM-DD");
-        }
-        if (loginType) {
-          filters.loginType = loginType;
-        }
-        if (userIdFilter) {
-          filters.userId = userIdFilter;
-        }
-        if (userIpFilter) {
-          filters.userIp = userIpFilter;
-        }
-
-        const funnelFilters =
-          Object.keys(filters).length > 0 ? filters : undefined;
-
-        const data = await fetchCampaignConversionFunnel(
-          selectedCampaign,
-          funnelFilters,
-        );
-        if (cancelled) {
-          return;
-        }
-        setConversionFunnel(data);
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) {
-          setConversionFunnel(null);
-          setConversionFunnelError(
-            "No se pudo obtener el funnel de conversión.",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingConversionFunnel(false);
-        }
-      }
-    };
-
-    loadConversionFunnel();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    selectedMenu,
-    selectedCampaign,
-    dateRange,
-    loginType,
-    userIdFilter,
-    userIpFilter,
-  ]);
-
-  useEffect(() => {
-    let cancelled = false;
-
     const loadRedemptionInsights = async () => {
       if (selectedMenu !== "redemptions") {
         if (!cancelled) {
@@ -978,16 +884,6 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     [activityDataset],
   );
 
-  const conversionFunnelDataset = useMemo(
-    () => buildConversionFunnelDataset(conversionFunnel),
-    [conversionFunnel],
-  );
-
-  const conversionFunnelAxisMax = useMemo(
-    () => calculateConversionFunnelAxisMax(conversionFunnelDataset),
-    [conversionFunnelDataset],
-  );
-
   const loginTypeLabelMap = useMemo(
     () => buildLoginTypeLabelMap(activity, LOGIN_TYPE_OPTIONS),
     [activity],
@@ -1012,27 +908,10 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     [activity],
   );
 
-  const segmentRedemptionChartData = useMemo(
-    () =>
-      buildSegmentRedemptionChartData(
-        summary,
-        SEGMENT_REDEMPTION_CHART_KEY,
-      ),
-    [summary],
-  );
-
-  const segmentRedemptionAxisExtents = useMemo(
-    () => calculateSegmentRedemptionAxisExtents(segmentRedemptionChartData),
-    [segmentRedemptionChartData],
-  );
-
   const axisExtents = useMemo(
     () => calculateActivityAxisExtents(activityDataset),
     [activityDataset],
   );
-
-  const loginSecurityNotes = loginSecurity?.metadata?.notes ?? [];
-  const loginSecurityDebug = loginSecurity?.metadata?.debug;
 
   const loginSecurityTopLoginData = useMemo(
     () => buildLoginSecurityTopIps(loginSecurity?.topLoginIps),
@@ -1051,11 +930,6 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
 
   const loginSecurityAtypicalRows = useMemo(
     () => buildLoginSecurityAtypicalRows(loginSecurity),
-    [loginSecurity],
-  );
-
-  const twoFactorHeatmapData = useMemo(
-    () => buildTwoFactorHeatmapData(loginSecurity),
     [loginSecurity],
   );
 
@@ -1166,22 +1040,13 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           <>
             <ActivitySection
               loadingActivity={loadingActivity}
-              loadingSummary={loadingSummary}
               error={activityError}
               activityDataset={activityDataset}
               activityCumulativeDataset={activityWithCumulative}
               axisExtents={axisExtents}
               loginTypeDistribution={loginTypeDistribution}
               loginHeatmapData={loginHeatmapData}
-              segmentRedemptionData={segmentRedemptionChartData}
-              segmentRedemptionAxisExtents={segmentRedemptionAxisExtents}
               annotations={activity?.annotations}
-            />
-            <ConversionFunnelSection
-              loading={loadingConversionFunnel}
-              error={conversionFunnelError}
-              dataset={conversionFunnelDataset}
-              axisMax={conversionFunnelAxisMax}
             />
           </>
         );
@@ -1206,15 +1071,12 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
             loginSecurityError={loginSecurityError}
             loading={loadingLoginSecurity}
             loginSecurity={loginSecurity}
-            notes={loginSecurityNotes}
-            debugInfo={loginSecurityDebug}
             topLoginData={loginSecurityTopLoginData}
             topRedemptionData={loginSecurityTopRedemptionData}
             detailColumns={loginSecurityDetailColumns}
             detailRows={loginSecurityDetailRows}
             atypicalColumns={loginSecurityAtypicalColumns}
             atypicalRows={loginSecurityAtypicalRows}
-            twoFactorHeatmapData={twoFactorHeatmapData}
           />
         );
       case "user-management":

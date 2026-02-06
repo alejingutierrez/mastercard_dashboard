@@ -35,8 +35,9 @@ Con la Lambda en producción, se comprobó acceso de lectura a las siguientes ba
 - `dentsu_mastercard_davivienda_afluentes_3`
 - `dentsu_mastercard_pacifico_sag_5`
 - `dentsu_mastercard_pichincha`
+- `dentsu_mastercard_guayaquil_5s_3`
 
-Las bases `dentsu_mastercard_avvillas_combo_playero` y `dentsu_mastercard_guayaquil_5s_3` no existen con esos nombres en el clúster (el clúster contiene `dentsu_mastercard_guayaquil5step` y variantes similares). Verifica su denominación real antes de consultar.
+La base `dentsu_mastercard_avvillas_combo_playero` sigue sin existir en el clúster. Confirmamos que la variante correcta para Guayaquil es `dentsu_mastercard_guayaquil_5s_3`; úsala en todas las consultas y despliegues.
 
 Prerrequisitos
 --------------
@@ -140,7 +141,7 @@ Configurar variables de entorno y VPC:
 aws lambda update-function-configuration \
   --region us-west-2 \
   --function-name mastercard-aurora-proxy \
-  --environment "Variables={DB_HOST=mastercard-pro.cluster-cyiv0cgh9m8s.us-west-2.rds.amazonaws.com,DB_SECRET_ARN=arn:aws:secretsmanager:us-west-2:071930880555:secret:rds!cluster-63217091-3511-41dd-a6bf-5e022f920411-Ht91K8,DB_PORT=3306,SSL_CERT_PATH=/var/task/global-bundle.pem}"
+  --environment "Variables={DB_HOST=mastercard-pro.cluster-cyiv0cgh9m8s.us-west-2.rds.amazonaws.com,DB_SECRET_ARN=arn:aws:secretsmanager:us-west-2:071930880555:secret:rds!cluster-63217091-3511-41dd-a6bf-5e022f920411-Ht91K8,DB_PORT=3306,DB_NAME=dentsu_mastercard_guayaquil_5s_3,SSL_CERT_PATH=/var/task/global-bundle.pem}"
 
 > Si la función se ejecuta en subredes privadas sin acceso a Secrets Manager, agrega `DB_USERNAME` y `DB_PASSWORD` (credenciales de solo lectura). El handler prioriza estas variables y usa el secreto como respaldo cuando están ausentes.
 
@@ -217,7 +218,7 @@ cat user.json
 
 8. Solución de problemas
 ------------------------
-- `Unknown database`: revisa el nombre (ej. `dentsu_mastercard_guayaquil5step` en vez de `dentsu_mastercard_guayaquil_5s_3`).
+- `Unknown database`: revisa el nombre (ej. `dentsu_mastercard_guayaquil_5s_3`).
 - `Access denied` / `OperationalError`: confirma que el SG `sg-0ba13acaefc6f37fc` continúe referenciado en los SG de Aurora.
 - `Timed out`: divide la consulta en partes más pequeñas o usa filtros/limit.
 - `Permission denied` al crear Lambda: valida que el usuario tenga `iam:PassRole` y permisos sobre Lambda y VPC.

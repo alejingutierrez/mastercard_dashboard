@@ -15,7 +15,6 @@ import dayjs from "dayjs";
 import type {
   ActivityResponse,
   CampaignSummaryResponse,
-  ConversionFunnelResponse,
   LoginSecurityAtypicalIp,
   LoginSecurityDetailRow,
   LoginSecurityResponse,
@@ -24,7 +23,6 @@ import type {
   Metric,
   RedemptionInsightsResponse,
   DashboardUser,
-  TwoFactorTotals,
 } from "../../types";
 
 type LoginSecurityTopIp = LoginSecurityTopLoginIp | LoginSecurityTopRedemptionIp;
@@ -49,12 +47,6 @@ export const SEVERITY_COLORS: Record<LoginSecurityAtypicalIp["severity"], string
 };
 
 export const MIN_PASSWORD_LENGTH = 8;
-
-export const EMPTY_TWO_FACTOR_TOTALS: TwoFactorTotals = Object.freeze({
-  totalUsers: 0,
-  usersWithTwoFactor: 0,
-  overallRate: null,
-});
 
 export type ActivityChartPoint = ActivityResponse["points"][number] & {
   day?: Date;
@@ -85,76 +77,16 @@ export interface LoginHeatmapData {
   minValue: number;
 }
 
-export interface SegmentRedemptionBreakdownEntry {
-  segment: string;
-  uniqueRedeemers: number;
-  totalRedemptions: number;
-  redeemedValue: number;
-  averageTicket: number | null;
-}
-
-export interface SegmentRedemptionAxisExtents {
-  counts: number;
-  value: number;
-}
-
 export interface ActivityAxisExtents {
   logins: number;
   redemptions: number;
   cumulativeRedeemedValue: number;
 }
 
-export interface ConversionFunnelChartDatum {
-  key: string;
-  weekStart: string;
-  weekEnd: string | null;
-  weekLabel: string;
-  weekRangeVerbose: string;
-  loginUsers: number;
-  awardRequests: number;
-  redemptionUsers: number;
-  loginOnlyUsers: number;
-  awardOnlyUsers: number;
-  redemptionUsersSegment: number;
-  conversionRate: number | null;
-  requestRate: number | null;
-  approvalRate: number | null;
-  loginEvents: number;
-  awardEvents: number;
-  redemptionEvents: number;
-}
-
 export type TopIpEntry = LoginSecurityTopIp & {
   rank: number;
   ipLabel: string;
 };
-
-export interface TwoFactorHeatmapWeek {
-  value: string;
-  label: string;
-  tooltip: string;
-}
-
-export interface TwoFactorHeatmapSegment {
-  value: string;
-  label: string;
-}
-
-export interface TwoFactorHeatmapMetrics {
-  rate: number;
-  usersWithTwoFactor: number;
-  totalUsers: number;
-}
-
-export interface TwoFactorHeatmapData {
-  weeks: TwoFactorHeatmapWeek[];
-  segments: TwoFactorHeatmapSegment[];
-  valueMap: Map<string, TwoFactorHeatmapMetrics>;
-  maxRate: number;
-  minRate: number;
-  targetRate: number | null;
-  totals: TwoFactorTotals;
-}
 
 export interface MerchantPieDatum {
   merchant: string;
@@ -224,6 +156,47 @@ export const formatPercentage = (
     return "N/D";
   }
   return `${(value * 100).toFixed(digits)}%`;
+};
+
+const clamp01 = (value: number) => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 1) {
+    return 1;
+  }
+  return value;
+};
+
+const interpolateColor = (
+  from: { r: number; g: number; b: number },
+  to: { r: number; g: number; b: number },
+  t: number,
+) => {
+  const ratio = clamp01(t);
+  const r = Math.round(from.r + (to.r - from.r) * ratio);
+  const g = Math.round(from.g + (to.g - from.g) * ratio);
+  const b = Math.round(from.b + (to.b - from.b) * ratio);
+  return `rgb(${r}, ${g}, ${b})`;
+};
+
+const computeHeatmapRatio = (
+  value: number,
+  maxValue: number,
+  minValue: number,
+) => {
+  if (!Number.isFinite(value) || !Number.isFinite(maxValue)) {
+    return null;
+  }
+  const safeMin = Number.isFinite(minValue) ? minValue : 0;
+  if (maxValue <= safeMin) {
+    return value > 0 ? 1 : 0;
+  }
+  const ratio = (value - safeMin) / (maxValue - safeMin);
+  return clamp01(ratio);
 };
 
 export const formatDateTime = (value: string | null | undefined): string => {
@@ -340,95 +313,6 @@ export const calculateActivityAxisExtents = (
     redemptions: padCount(maxRedemptions),
     cumulativeRedeemedValue: padCurrency(maxCumulativeRedeemedValue),
   };
-};
-
-const safeNumber = (value: unknown) => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : 0;
-};
-
-const normalizeRate = (value: number | null | undefined) => {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return null;
-  }
-  if (value < 0) {
-    return 0;
-  }
-  if (value > 1) {
-    return 1;
-  }
-  return Number(value.toFixed(4));
-};
-
-export const buildConversionFunnelDataset = (
-  conversionFunnel: ConversionFunnelResponse | null,
-): ConversionFunnelChartDatum[] => {
-  if (!conversionFunnel?.series || conversionFunnel.series.length === 0) {
-    return [];
-  }
-
-  return conversionFunnel.series.map((entry) => {
-    const start = dayjs(entry.weekStart, "YYYY-MM-DD", true);
-    const endCandidate = entry.weekEnd
-      ? dayjs(entry.weekEnd, "YYYY-MM-DD", true)
-      : start.isValid()
-        ? start.add(6, "day")
-        : null;
-
-    const startLabel = start.isValid() ? start.format("DD/MM") : entry.weekStart;
-    const endLabel = endCandidate?.isValid()
-      ? endCandidate.format("DD/MM")
-      : entry.weekEnd ?? entry.weekStart;
-
-    const loginUsers = safeNumber(entry.loginUsers);
-    const awardRequests = safeNumber(entry.awardRequests);
-    const redemptionUsers = safeNumber(entry.redemptionUsers);
-
-    const loginOnlyUsers = Math.max(loginUsers - awardRequests, 0);
-    const awardOnlyUsers = Math.max(awardRequests - redemptionUsers, 0);
-    const redemptionUsersSegment = Math.max(redemptionUsers, 0);
-
-    return {
-      key: entry.weekStart,
-      weekStart: entry.weekStart,
-      weekEnd: entry.weekEnd ?? null,
-      weekLabel: `${startLabel} → ${endLabel}`,
-      weekRangeVerbose: `Semana del ${startLabel} al ${endLabel}`,
-      loginUsers,
-      awardRequests,
-      redemptionUsers,
-      loginOnlyUsers,
-      awardOnlyUsers,
-      redemptionUsersSegment,
-      conversionRate: normalizeRate(entry.conversionRate),
-      requestRate: normalizeRate(entry.requestRate),
-      approvalRate: normalizeRate(entry.approvalRate),
-      loginEvents: safeNumber(entry.loginEvents),
-      awardEvents: safeNumber(entry.awardEvents),
-      redemptionEvents: safeNumber(entry.redemptionEvents),
-    };
-  });
-};
-
-export const calculateConversionFunnelAxisMax = (
-  dataset: ConversionFunnelChartDatum[],
-): number => {
-  if (dataset.length === 0) {
-    return 1;
-  }
-  let maxValue = 0;
-  dataset.forEach((entry) => {
-    if (entry.loginUsers > maxValue) {
-      maxValue = entry.loginUsers;
-    }
-  });
-  if (maxValue <= 0) {
-    return 1;
-  }
-  return Math.ceil(maxValue * 1.1);
 };
 
 export const buildLoginTypeLabelMap = (
@@ -550,125 +434,6 @@ export const buildLoginHeatmapData = (
   };
 };
 
-export const buildSegmentRedemptionChartData = (
-  summary: CampaignSummaryResponse | null,
-  chartKey: string,
-): SegmentRedemptionBreakdownEntry[] => {
-  const chart = summary?.charts?.find((item) => item.key === chartKey);
-  if (!chart || !Array.isArray(chart.data)) {
-    return [];
-  }
-
-  const toNumber = (value: unknown) => {
-    if (value === null || value === undefined) {
-      return 0;
-    }
-    if (typeof value === "number") {
-      return Number.isFinite(value) ? value : 0;
-    }
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-
-  return chart.data
-    .map((rawRow) => {
-      const row = rawRow as Record<string, unknown>;
-      const rawSegment =
-        typeof row.segment_label === "string"
-          ? row.segment_label
-          : typeof row.segment === "string"
-            ? row.segment
-            : "";
-      const segment = rawSegment.trim() ? rawSegment.trim() : "Sin segmento";
-      const uniqueRedeemers = toNumber(
-        row.unique_redeemers ?? row.uniqueRedeemers ?? row.uniqueRedeemer,
-      );
-      const totalRedemptions = toNumber(
-        row.total_redemptions ??
-          row.totalRedemptions ??
-          row.redemptions ??
-          row.total_redemption,
-      );
-      const redeemedValue = toNumber(
-        row.redeemed_value ??
-          row.redeemedValue ??
-          row.total_value ??
-          row.totalValue,
-      );
-      const averageTicketRaw =
-        row.average_ticket ?? row.averageTicket ?? null;
-      const averageTicket =
-        averageTicketRaw === null || averageTicketRaw === undefined
-          ? uniqueRedeemers > 0
-            ? redeemedValue / uniqueRedeemers
-            : null
-          : (() => {
-              const numeric = toNumber(averageTicketRaw);
-              return Number.isFinite(numeric) ? numeric : null;
-            })();
-
-      return {
-        segment,
-        uniqueRedeemers,
-        totalRedemptions,
-        redeemedValue,
-        averageTicket,
-      };
-    })
-    .filter(
-      (entry) =>
-        entry.totalRedemptions > 0 ||
-        entry.redeemedValue > 0 ||
-        entry.uniqueRedeemers > 0,
-    );
-};
-
-export const calculateSegmentRedemptionAxisExtents = (
-  data: SegmentRedemptionBreakdownEntry[],
-): SegmentRedemptionAxisExtents => {
-  if (data.length === 0) {
-    return {
-      counts: 1,
-      value: 1,
-    };
-  }
-
-  let maxCount = 0;
-  let maxValue = 0;
-  data.forEach((entry) => {
-    if (entry.uniqueRedeemers > maxCount) {
-      maxCount = entry.uniqueRedeemers;
-    }
-    if (entry.totalRedemptions > maxCount) {
-      maxCount = entry.totalRedemptions;
-    }
-    if (entry.redeemedValue > maxValue) {
-      maxValue = entry.redeemedValue;
-    }
-  });
-
-  const padCount = (value: number) => {
-    if (!Number.isFinite(value) || value <= 0) {
-      return 1;
-    }
-    return Math.max(Math.ceil(value * 1.1), 1);
-  };
-
-  const padCurrency = (value: number) => {
-    if (!Number.isFinite(value) || value <= 0) {
-      return 1;
-    }
-    const padded = value * 1.1;
-    const magnitude = 10 ** Math.max(Math.floor(Math.log10(padded)) - 1, 0);
-    return Math.ceil(padded / magnitude) * magnitude;
-  };
-
-  return {
-    counts: padCount(maxCount),
-    value: padCurrency(maxValue),
-  };
-};
-
 export const buildLoginSecurityTopIps = (
   entries: LoginSecurityTopIp[] | undefined | null,
 ): TopIpEntry[] => {
@@ -680,100 +445,6 @@ export const buildLoginSecurityTopIps = (
     rank: index + 1,
     ipLabel: entry.ip ?? "Sin IP",
   }));
-};
-
-export const buildTwoFactorHeatmapData = (
-  loginSecurity: LoginSecurityResponse | null,
-): TwoFactorHeatmapData => {
-  const info = loginSecurity?.twoFactorAdoption;
-  const normalizedTarget =
-    typeof info?.targetRate === "number"
-      ? Math.min(Math.max(info.targetRate, 0), 1)
-      : null;
-
-  if (!info || !Array.isArray(info.entries) || info.entries.length === 0) {
-    const totals = info?.totals ?? EMPTY_TWO_FACTOR_TOTALS;
-    return {
-      weeks: [],
-      segments: [],
-      valueMap: new Map<string, TwoFactorHeatmapMetrics>(),
-      maxRate: normalizedTarget && normalizedTarget > 0 ? normalizedTarget : 0,
-      minRate: 0,
-      targetRate: normalizedTarget,
-      totals: { ...totals },
-    };
-  }
-
-  const weeks = info.weeks.map((week) => {
-    const start = dayjs(week.start, "YYYY-MM-DD", true);
-    const endRaw =
-      week.end && dayjs(week.end, "YYYY-MM-DD", true).isValid()
-        ? dayjs(week.end, "YYYY-MM-DD", true)
-        : start.isValid()
-          ? start.add(6, "day")
-          : null;
-    const label = start.isValid() ? start.format("DD/MM") : week.start;
-    const tooltip = start.isValid()
-      ? endRaw && endRaw.isValid()
-        ? `${start.format("DD/MM/YYYY")} – ${endRaw.format("DD/MM/YYYY")}`
-        : start.format("DD/MM/YYYY")
-      : week.start;
-    return {
-      value: week.start,
-      label,
-      tooltip,
-    };
-  });
-
-  const segments = info.segments.map((segment) => ({
-    value: segment,
-    label: segment,
-  }));
-
-  const valueMap = new Map<string, TwoFactorHeatmapMetrics>();
-  let maxRate = 0;
-  let minRate: number | null = null;
-
-  info.entries.forEach((entry) => {
-    const key = `${entry.segment}|${entry.weekStart}`;
-    const rawRate =
-      typeof entry.adoptionRate === "number"
-        ? entry.adoptionRate
-        : entry.totalUsers > 0
-          ? entry.usersWithTwoFactor / entry.totalUsers
-          : 0;
-    const rate = Math.min(Math.max(rawRate, 0), 1);
-    valueMap.set(key, {
-      rate,
-      usersWithTwoFactor: entry.usersWithTwoFactor,
-      totalUsers: entry.totalUsers,
-    });
-    if (rate > maxRate) {
-      maxRate = rate;
-    }
-    if (minRate === null || rate < minRate) {
-      minRate = rate;
-    }
-  });
-
-  const colorMax =
-    maxRate > 0
-      ? Math.max(maxRate, normalizedTarget ?? 0)
-      : normalizedTarget && normalizedTarget > 0
-        ? normalizedTarget
-        : 1;
-
-  const totals = info.totals ?? EMPTY_TWO_FACTOR_TOTALS;
-
-  return {
-    weeks,
-    segments,
-    valueMap,
-    maxRate: colorMax,
-    minRate: minRate ?? 0,
-    targetRate: normalizedTarget,
-    totals: { ...totals },
-  };
 };
 
 export const buildLoginSecurityDetailRows = (
@@ -1218,39 +889,35 @@ export const getHeatmapColor = (
   maxValue: number,
   minValue: number,
 ): string => {
-  if (
-    !Number.isFinite(value) ||
-    !Number.isFinite(maxValue) ||
-    !Number.isFinite(minValue)
-  ) {
+  const ratio = computeHeatmapRatio(value, maxValue, minValue);
+  if (ratio === null) {
     return "#f5f5f5";
   }
-  if (maxValue <= minValue) {
-    return "#f5f5f5";
+  if (ratio === 0) {
+    return "#ffffff";
   }
-
-  const ratio = Math.min(
-    Math.max((value - minValue) / (maxValue - minValue), 0),
-    1,
-  );
-
-  if (ratio < 0.5) {
-    const t = ratio / 0.5;
-    const start = { r: 247, g: 158, b: 27 };
-    const end = { r: 255, g: 255, b: 255 };
-    const r = Math.round(start.r + (end.r - start.r) * t);
-    const g = Math.round(start.g + (end.g - start.g) * t);
-    const b = Math.round(start.b + (end.b - start.b) * t);
-    return `rgb(${r}, ${g}, ${b})`;
+  const white = { r: 255, g: 255, b: 255 };
+  const orange = { r: 247, g: 158, b: 27 };
+  const red = { r: 235, g: 0, b: 27 };
+  if (ratio <= 0.5) {
+    return interpolateColor(white, orange, ratio / 0.5);
   }
+  return interpolateColor(orange, red, (ratio - 0.5) / 0.5);
+};
 
-  const t = (ratio - 0.5) / 0.5;
-  const start = { r: 255, g: 255, b: 255 };
-  const end = { r: 235, g: 0, b: 27 };
-  const r = Math.round(start.r + (end.r - start.r) * t);
-  const g = Math.round(start.g + (end.g - start.g) * t);
-  const b = Math.round(start.b + (end.b - start.b) * t);
-  return `rgb(${r}, ${g}, ${b})`;
+export const getHeatmapTextColor = (
+  value: number,
+  maxValue: number,
+  minValue: number,
+): string => {
+  const ratio = computeHeatmapRatio(value, maxValue, minValue);
+  if (ratio === null) {
+    return "#666666";
+  }
+  if (ratio === 0) {
+    return "#666666";
+  }
+  return ratio >= 0.75 ? "#ffffff" : "#111111";
 };
 
 export const formatHourLabel = (bucket: number): string => {

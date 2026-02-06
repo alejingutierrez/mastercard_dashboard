@@ -20,7 +20,7 @@ La vista principal sintetiza la salud de cada campaña con métricas obtenibles 
 **CHART 1 — Indicadores generales (KPIs con sparkline diario)**  
 - Objetivo: entregar en un vistazo la salud del programa resaltando volumen, valor económico y cumplimiento de metas, mostrando alertas tempranas.  
 - Tipo: Tarjetas con mini serie de tiempo (promedio móvil 7 días), variación vs. periodo anterior, meta esperada y semáforos configurables.  
-- Datos: agregaciones diarias de `mc_tracings.amount_1`, `mc_tracings.trx_1`, `mc_logins.id`, `mc_logins.idmask`, `mc_redemptions.value`, `mc_awards_logs.id_award` sobre las bases `dentsu_mastercard_bogota_uso_10`, `dentsu_mastercard_debitazo_6`, `dentsu_mastercard_davivienda_afluentes_3`, `dentsu_mastercard_pacifico_sag_5` y `dentsu_mastercard_pichincha`.  
+- Datos: agregaciones diarias de `mc_tracings.amount_1`, `mc_tracings.trx_1`, `mc_logins.id`, `mc_logins.idmask`, `mc_redemptions.value`, `mc_awards_logs.id_award` sobre las bases `dentsu_mastercard_bogota_uso_10`, `dentsu_mastercard_debitazo_6`, `dentsu_mastercard_davivienda_afluentes_3`, `dentsu_mastercard_pacifico_sag_5`, `dentsu_mastercard_pichincha` y `dentsu_mastercard_guayaquil_5s_3`.  
 - Segmentación: filtros combinables por campaña (selección de base), segmento (`mc_users.segment`), tipo de usuario (`mc_users.user_type`) y rango de fechas.  
 - Validaciones: excluir `idmask` de prueba, normalizar `datetime` a ISO8601, calcular usuarios únicos con `COUNT(DISTINCT idmask)` y limitar la ventana analizada para mantener la Lambda por debajo de 30 s.  
 - Historia de usuario: Como directora comercial, quiero visualizar los KPIs críticos con su tendencia diaria para detectar desviaciones y activar planes sin revisar múltiples reportes.

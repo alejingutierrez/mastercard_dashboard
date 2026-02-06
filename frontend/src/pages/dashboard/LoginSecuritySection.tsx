@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import {
   Alert,
   Card,
@@ -8,8 +7,6 @@ import {
   Space,
   Spin,
   Table,
-  Tag,
-  Tooltip,
   Typography,
 } from "antd";
 import {
@@ -32,9 +29,8 @@ import {
   formatNumber,
   formatPercentage,
   formatValue,
-  getHeatmapColor,
 } from "./dataTransforms";
-import type { TopIpEntry, TwoFactorHeatmapData } from "./dataTransforms";
+import type { TopIpEntry } from "./dataTransforms";
 
 const { Title, Text } = Typography;
 
@@ -43,15 +39,12 @@ interface LoginSecuritySectionProps {
   loginSecurityError?: string;
   loading: boolean;
   loginSecurity: LoginSecurityResponse | null;
-  notes: string[];
-  debugInfo?: LoginSecurityResponse["metadata"]["debug"];
   topLoginData: TopIpEntry[];
   topRedemptionData: TopIpEntry[];
   detailColumns: ColumnsType<LoginSecurityDetailRow>;
   detailRows: LoginSecurityDetailRow[];
   atypicalColumns: ColumnsType<LoginSecurityAtypicalIp>;
   atypicalRows: LoginSecurityAtypicalIp[];
-  twoFactorHeatmapData: TwoFactorHeatmapData;
 }
 
 const LoginSecuritySection = ({
@@ -59,15 +52,12 @@ const LoginSecuritySection = ({
   loginSecurityError,
   loading,
   loginSecurity,
-  notes,
-  debugInfo,
   topLoginData,
   topRedemptionData,
   detailColumns,
   detailRows,
   atypicalColumns,
   atypicalRows,
-  twoFactorHeatmapData,
 }: LoginSecuritySectionProps) => {
   if (selectedCampaign === "all") {
     return (
@@ -83,37 +73,10 @@ const LoginSecuritySection = ({
 
   const hasTopLoginIps = topLoginData.length > 0;
   const hasTopRedemptionIps = topRedemptionData.length > 0;
-  const hasTwoFactorHeatmap =
-    twoFactorHeatmapData.weeks.length > 0 &&
-    twoFactorHeatmapData.segments.length > 0;
-
   return (
     <Spin spinning={loading}>
       {loginSecurity ? (
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
-          {(notes.length > 0 || debugInfo) && (
-            <Alert
-              type="info"
-              showIcon
-              message="Observaciones de la fuente"
-              description={
-                <Space direction="vertical" size="small">
-                  {notes.map((note) => (
-                    <Text key={note}>{note}</Text>
-                  ))}
-                  {debugInfo && (
-                    <Text type="secondary">
-                      Debug · loginsByIpRows: {formatNumber(debugInfo.loginsByIpRows)} ·
-                      redemptionsByIpRows: {formatNumber(debugInfo.redemptionsByIpRows)} ·
-                      loginDetailsRows: {formatNumber(debugInfo.loginDetailsRows)} ·
-                      redemptionDetailsRows: {formatNumber(debugInfo.redemptionDetailsRows)}
-                    </Text>
-                  )}
-                </Space>
-              }
-            />
-          )}
-
           <Row gutter={[24, 32]} align="stretch">
             <Col xs={24} xl={12}>
               <Card className="activity-card">
@@ -320,106 +283,6 @@ const LoginSecuritySection = ({
                   ),
                 }}
               />
-            </div>
-          </Card>
-
-          <Card className="activity-card">
-            <div className="activity-heading">
-              <div className="activity-header">
-                <Title level={4} className="activity-title">
-                  Adopción de doble factor
-                </Title>
-                <div className="activity-separator" />
-              </div>
-              <Text type="secondary" className="activity-subtitle">
-                Evolución semanal de usuarios con autenticación de doble factor por segmento.
-              </Text>
-            </div>
-            <div className="activity-body">
-              {hasTwoFactorHeatmap ? (
-                <div className="activity-chart activity-chart--heatmap">
-                  <div
-                    className="heatmap-grid"
-                    style={{
-                      gridTemplateColumns: `160px repeat(${twoFactorHeatmapData.weeks.length}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    <div className="heatmap-grid__corner">Segmento</div>
-                    {twoFactorHeatmapData.weeks.map((week) => (
-                      <Tooltip key={`twofactor-week-${week.value}`} title={week.tooltip}>
-                        <div className="heatmap-grid__header">{week.label}</div>
-                      </Tooltip>
-                    ))}
-                    {twoFactorHeatmapData.segments.map((segment) => (
-                      <Fragment key={`twofactor-segment-${segment.value}`}>
-                        <div className="heatmap-grid__row-label">{segment.label}</div>
-                        {twoFactorHeatmapData.weeks.map((week) => {
-                          const cellKey = `${segment.value}|${week.value}`;
-                          const metrics =
-                            twoFactorHeatmapData.valueMap.get(cellKey) ?? null;
-                          const rate = metrics?.rate ?? 0;
-                          const hasUsers =
-                            metrics && metrics.totalUsers > 0 && metrics.usersWithTwoFactor > 0;
-                          const background = getHeatmapColor(
-                            rate,
-                            twoFactorHeatmapData.maxRate,
-                            twoFactorHeatmapData.minRate,
-                          );
-                          const percentageText = hasUsers
-                            ? formatPercentage(rate)
-                            : "";
-                          return (
-                            <Tooltip
-                              key={`twofactor-cell-${cellKey}`}
-                              title={`${segment.label} · ${week.tooltip}: ${percentageText} · ${formatNumber(
-                                metrics?.usersWithTwoFactor ?? 0,
-                              )}/${formatNumber(metrics?.totalUsers ?? 0)} usuarios con 2FA`}
-                            >
-                              <div
-                                className="heatmap-grid__cell"
-                                style={{
-                                  backgroundColor: background,
-                                  color: hasUsers ? (rate > 0.55 ? "#ffffff" : "#111111") : "#666666",
-                                }}
-                              >
-                                {percentageText}
-                              </div>
-                            </Tooltip>
-                          );
-                        })}
-                      </Fragment>
-                    ))}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 16,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      flexWrap: "wrap",
-                      gap: 8,
-                    }}
-                  >
-                    <Text type="secondary">
-                      Usuarios analizados: {formatNumber(twoFactorHeatmapData.totals.totalUsers)} ·
-                      Con 2FA: {formatNumber(twoFactorHeatmapData.totals.usersWithTwoFactor)}
-                      {twoFactorHeatmapData.totals.overallRate !== null
-                        ? ` · Adopción: ${formatPercentage(
-                            twoFactorHeatmapData.totals.overallRate,
-                          )}`
-                        : ""}
-                    </Text>
-                    {typeof twoFactorHeatmapData.targetRate === "number" && (
-                      <Tag color="blue">
-                        Meta: {formatPercentage(twoFactorHeatmapData.targetRate, 0)}
-                      </Tag>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="activity-empty">
-                  <Empty description="No fue posible calcular la adopción de 2FA con los filtros actuales." />
-                </div>
-              )}
             </div>
           </Card>
 

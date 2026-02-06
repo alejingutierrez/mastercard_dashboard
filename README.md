@@ -29,6 +29,11 @@ cp frontend/.env.example frontend/.env
      - `LAMBDA_FUNCTION_NAME`: nombre de la función (por defecto `mastercard-aurora-proxy`).
      - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` (si aplica) **de solo lectura**.
      - `CORS_ORIGINS`: orígenes permitidos (ej. `http://localhost:5273`).
+     - `DASHBOARD_JWT_SECRET`: secreto usado para firmar los tokens (define uno distinto por entorno).
+     - `DASHBOARD_JWT_EXPIRES_IN`: vigencia del token (ej. `8h`, `24h`, `7d`).
+     - `DASHBOARD_JWT_REFRESH_THRESHOLD_SECONDS`: margen (en segundos) para renovar automáticamente el token cuando el usuario sigue activo.
+     - `DASHBOARD_ADMIN_EMAIL`, `DASHBOARD_ADMIN_PASSWORD`: credenciales iniciales sembradas cuando no existe el archivo de usuarios.
+     - `DASHBOARD_USERS_S3_BUCKET` y `DASHBOARD_USERS_S3_KEY`: ubicación en S3 donde se replica `dashboardUsers.json` para evitar pérdidas durante los despliegues (requiere permisos `s3:GetObject`, `s3:PutObject`, `s3:HeadObject`).
    - `frontend/.env`
      - `VITE_API_URL`: URL base del backend (ej. `http://localhost:4000`).
 
@@ -71,7 +76,21 @@ docker compose down
 - `GET /api/campaigns`: listado de campañas disponibles (id, nombre, descripción).
 - `GET /api/campaigns/:id/summary`: devuelve métricas agregadas, datasets para gráficas y una muestra de registros (`LIMIT 50`) utilizando solo las consultas permitidas en `backend/src/config/campaigns.js`.
 
+Cada respuesta protegida expone el encabezado `X-Dashboard-Token` cuando la sesión está próxima a expirar; el frontend lo lee para renovar automáticamente el token y evitar cierres de sesión inesperados.
+
 > **Importante**: No añadir consultas de escritura. Cualquier nueva consulta debe respetar la política de solo lectura y, de ser necesario, documentarse en `docs/data_dictionary.md`.
+
+### Persistencia de usuarios de dashboard
+
+- Configura `DASHBOARD_USERS_S3_BUCKET` y `DASHBOARD_USERS_S3_KEY` en el backend (y en la tarea de ECS) para que `backend/src/services/userStore.js` sincronice automáticamente `dashboardUsers.json` contra S3 cada vez que cambia.
+- La primera vez debes subir el archivo existente manualmente, por ejemplo:
+
+  ```bash
+  aws s3 cp backend/src/data/dashboardUsers.json \
+    s3://<tu-bucket>/<ruta>/dashboardUsers.json
+  ```
+
+- Asegúrate de que el rol de ECS tenga permisos `s3:GetObject`, `s3:PutObject` y `s3:HeadObject` sobre esa ruta. Si S3 no está configurado, el backend seguirá usando el archivo local, pero **los usuarios se perderán** cuando el contenedor se reinicie.
 
 ## Verificaciones realizadas
 

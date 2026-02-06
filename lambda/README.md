@@ -46,7 +46,7 @@ aws lambda create-function \
   --timeout 30 \
   --memory-size 512 \
   --role arn:aws:iam::071930880555:role/lambda-aurora-proxy \
-  --environment Variables="{DB_HOST=mastercard-pro.cluster-cyiv0cgh9m8s.us-west-2.rds.amazonaws.com,DB_SECRET_ARN=arn:aws:secretsmanager:us-west-2:071930880555:secret:rds!cluster-63217091-3511-41dd-a6bf-5e022f920411-Ht91K8,DB_PORT=3306,SSL_CERT_PATH=/var/task/rds-ca-rsa2048-g1.pem}" \
+  --environment Variables="{DB_HOST=mastercard-pro.cluster-cyiv0cgh9m8s.us-west-2.rds.amazonaws.com,DB_SECRET_ARN=arn:aws:secretsmanager:us-west-2:071930880555:secret:rds!cluster-63217091-3511-41dd-a6bf-5e022f920411-Ht91K8,DB_PORT=3306,DB_NAME=dentsu_mastercard_guayaquil_5s_3,SSL_CERT_PATH=/var/task/rds-ca-rsa2048-g1.pem}" \
   --vpc-config SubnetIds=subnet-0f8e1f7264c953536,subnet-0a754a1d2c5604ad5 SecurityGroupIds=sg-lambda-aurora
 ```
 

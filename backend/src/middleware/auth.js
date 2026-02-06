@@ -1,4 +1,4 @@
-const { verifyToken } = require("../utils/token");
+const { createToken, verifyToken, shouldRefreshToken } = require("../utils/token");
 const { findUserByIdInternal, sanitizeUser } = require("../services/userStore");
 
 const extractToken = (req) => {
@@ -22,7 +22,17 @@ const requireAuth = async (req, res, next) => {
       return res.status(401).json({ error: "Usuario no válido" });
     }
 
-    req.user = sanitizeUser(user);
+    const sanitizedUser = sanitizeUser(user);
+    req.user = sanitizedUser;
+
+    if (shouldRefreshToken(decoded)) {
+      const refreshedToken = createToken({
+        sub: sanitizedUser.id,
+        role: sanitizedUser.role,
+      });
+      res.setHeader("X-Dashboard-Token", refreshedToken);
+    }
+
     next();
   } catch (error) {
     console.error("[auth] Error validando token", error);

@@ -4,10 +4,8 @@ import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import type { LoginFormValues } from "./pages/Login";
 import { login as loginRequest, fetchCurrentUser } from "./api/auth";
-import { clearAuthToken, setAuthToken } from "./api/client";
+import { clearAuthToken, setAuthToken, TOKEN_STORAGE_KEY } from "./api/client";
 import type { DashboardUser } from "./types";
-
-const TOKEN_STORAGE_KEY = "dashboard_token";
 
 const App = () => {
   const [currentUser, setCurrentUser] = useState<DashboardUser | null>(null);

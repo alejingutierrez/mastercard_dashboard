@@ -3,6 +3,7 @@ const path = require("path");
 const { randomUUID } = require("node:crypto");
 const bcrypt = require("bcryptjs");
 const { CAMPAIGNS } = require("../config/campaigns");
+const { syncUsersFromS3, syncUsersToS3 } = require("./userStoreSync");
 
 const USERS_FILE =
   process.env.DASHBOARD_USERS_FILE ||
@@ -34,14 +35,17 @@ const normalizeAllowedCampaignIds = (values) => {
 };
 
 const applyUserDefaults = (user) => {
-  const normalizedAllowed =
-    normalizeAllowedCampaignIds(user.allowedCampaignIds) || ALL_CAMPAIGN_IDS;
+  const normalizedAllowed = normalizeAllowedCampaignIds(user.allowedCampaignIds);
+  const desiredAllowed =
+    normalizedAllowed && normalizedAllowed.length > 0
+      ? normalizedAllowed
+      : ALL_CAMPAIGN_IDS;
   const currentAllowed = Array.isArray(user.allowedCampaignIds)
     ? user.allowedCampaignIds
     : [];
   const allowedMatches =
-    currentAllowed.length === normalizedAllowed.length &&
-    currentAllowed.every((value, index) => value === normalizedAllowed[index]);
+    currentAllowed.length === desiredAllowed.length &&
+    currentAllowed.every((value, index) => value === desiredAllowed[index]);
 
   const mustResetPassword =
     typeof user.mustResetPassword === "boolean"
@@ -56,7 +60,7 @@ const applyUserDefaults = (user) => {
     ...user,
     allowedCampaignIds: allowedMatches
       ? currentAllowed
-      : normalizedAllowed.slice(),
+      : desiredAllowed.slice(),
     mustResetPassword,
   };
 };
@@ -72,8 +76,11 @@ const sanitizeUser = (user) => {
     mustResetPassword,
     ...rest
   } = user;
+  const normalizedAllowed = normalizeAllowedCampaignIds(allowedCampaignIds);
   const normalizedAllowedCampaignIds =
-    normalizeAllowedCampaignIds(allowedCampaignIds) || ALL_CAMPAIGN_IDS;
+    normalizedAllowed && normalizedAllowed.length > 0
+      ? normalizedAllowed
+      : ALL_CAMPAIGN_IDS;
   return {
     ...rest,
     allowedCampaignIds: normalizedAllowedCampaignIds,
@@ -101,6 +108,7 @@ const readUsersFile = async () => {
 const writeUsersFile = async (users) => {
   await fs.mkdir(path.dirname(USERS_FILE), { recursive: true });
   await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+  await syncUsersToS3(USERS_FILE);
 };
 
 const ensureAdminSeed = async (users) => {
@@ -162,6 +170,14 @@ const normalizeAllUsersOnDisk = async () => {
 
 const initializeUserStore = async () => {
   await fs.mkdir(path.dirname(USERS_FILE), { recursive: true });
+  const downloaded = await syncUsersFromS3(USERS_FILE);
+  if (downloaded) {
+    console.info("[userStore] Archivo de usuarios inicial cargado desde S3.");
+  } else if (process.env.DASHBOARD_USERS_S3_BUCKET && process.env.DASHBOARD_USERS_S3_KEY) {
+    console.warn(
+      "[userStore] No se encontró el archivo en S3; se continuará con el archivo local."
+    );
+  }
   let users = await readUsersFile();
   users = users.filter(Boolean);
   const seededUsers = await ensureAdminSeed(users);
@@ -169,6 +185,8 @@ const initializeUserStore = async () => {
     await writeUsersFile(seededUsers);
   }
   await normalizeAllUsersOnDisk();
+  await syncUsersToS3(USERS_FILE);
+  console.info("[userStore] Normalización de usuarios completada.");
 };
 
 const getAllUsersInternal = async () => {

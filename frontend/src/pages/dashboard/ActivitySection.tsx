@@ -24,7 +24,6 @@ import {
   YAxis,
   Bar,
   BarChart as ReBarChart,
-  ComposedChart as ReComposedChart,
 } from "recharts";
 import type { ActivityAnnotation } from "../../types";
 import {
@@ -32,6 +31,7 @@ import {
   formatNumber,
   formatValue,
   getHeatmapColor,
+  getHeatmapTextColor,
 } from "./dataTransforms";
 import type {
   ActivityAxisExtents,
@@ -39,37 +39,29 @@ import type {
   ActivityCumulativePoint,
   LoginHeatmapData,
   LoginTypeDistributionEntry,
-  SegmentRedemptionAxisExtents,
-  SegmentRedemptionBreakdownEntry,
 } from "./dataTransforms";
 
 const { Title, Text } = Typography;
 
 interface ActivitySectionProps {
   loadingActivity: boolean;
-  loadingSummary: boolean;
   error?: string;
   activityDataset: ActivityChartPoint[];
   activityCumulativeDataset: ActivityCumulativePoint[];
   axisExtents: ActivityAxisExtents;
   loginTypeDistribution: LoginTypeDistributionEntry[];
   loginHeatmapData: LoginHeatmapData;
-  segmentRedemptionData: SegmentRedemptionBreakdownEntry[];
-  segmentRedemptionAxisExtents: SegmentRedemptionAxisExtents;
   annotations?: ActivityAnnotation[];
 }
 
 const ActivitySection = ({
   loadingActivity,
-  loadingSummary,
   error,
   activityDataset,
   activityCumulativeDataset,
   axisExtents,
   loginTypeDistribution,
   loginHeatmapData,
-  segmentRedemptionData,
-  segmentRedemptionAxisExtents,
   annotations,
 }: ActivitySectionProps) => {
   const hasActivityData = activityDataset.length > 0;
@@ -77,7 +69,6 @@ const ActivitySection = ({
   const hasHeatmapData =
     loginHeatmapData.dayHeaders.length > 0 &&
     loginHeatmapData.hourBuckets.length > 0;
-  const hasSegmentRedemptionData = segmentRedemptionData.length > 0;
 
   return (
     <Space direction="vertical" size="large" style={{ width: "100%" }}>
@@ -510,12 +501,11 @@ const ActivitySection = ({
                               loginHeatmapData.maxValue,
                               loginHeatmapData.minValue,
                             );
-                            const textColor =
-                              logins > 0 && loginHeatmapData.maxValue > 0
-                                ? logins / loginHeatmapData.maxValue > 0.55
-                                  ? "#ffffff"
-                                  : "#111111"
-                                : "#666666";
+                            const textColor = getHeatmapTextColor(
+                              logins,
+                              loginHeatmapData.maxValue,
+                              loginHeatmapData.minValue,
+                            );
                             const tooltipLabel = `${header.fullLabel} · ${formatHourLabel(
                               bucket,
                             )}`;
@@ -553,143 +543,6 @@ const ActivitySection = ({
         </Col>
       </Row>
 
-      <Card className="activity-card">
-        <div className="activity-heading">
-          <div className="activity-header">
-            <Title level={4} className="activity-title">
-              Redenciones por segmento
-            </Title>
-            <div className="activity-separator" />
-          </div>
-          <Text type="secondary" className="activity-subtitle">
-            Usuarios con redención, número de redenciones y valor redimido
-            agrupados por segmento.
-          </Text>
-        </div>
-        <div className="activity-body">
-          <Spin spinning={loadingSummary}>
-            {hasSegmentRedemptionData ? (
-              <div className="activity-chart activity-chart--wide">
-                <ResponsiveContainer width="100%" height={420}>
-                  <ReComposedChart
-                    data={segmentRedemptionData}
-                    margin={{ top: 24, right: 48, left: 48, bottom: 48 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="segment"
-                      interval={0}
-                      tick={{ fontSize: 12 }}
-                      angle={segmentRedemptionData.length > 5 ? -20 : 0}
-                      textAnchor={
-                        segmentRedemptionData.length > 5 ? "end" : "middle"
-                      }
-                      height={segmentRedemptionData.length > 5 ? 80 : 50}
-                      tickMargin={12}
-                      label={{
-                        value: "Segmento",
-                        position: "insideBottom",
-                        offset: -12,
-                        style: { textAnchor: "middle" },
-                      }}
-                    />
-                    <YAxis
-                      yAxisId="counts"
-                      domain={[0, segmentRedemptionAxisExtents.counts]}
-                      tickFormatter={(value: number) => formatNumber(value)}
-                      tick={{ fontSize: 12 }}
-                      label={{
-                        value: "Usuarios / Redenciones",
-                        angle: -90,
-                        position: "insideLeft",
-                        offset: -12,
-                        style: { textAnchor: "middle" },
-                      }}
-                    />
-                    <YAxis
-                      yAxisId="value"
-                      orientation="right"
-                      domain={[0, segmentRedemptionAxisExtents.value]}
-                      tickFormatter={(value: number) =>
-                        formatValue(value, "currency")
-                      }
-                      tick={{ fontSize: 12 }}
-                      label={{
-                        value: "Valor redimido (COP)",
-                        angle: -90,
-                        position: "insideRight",
-                        offset: -8,
-                        style: { textAnchor: "middle" },
-                      }}
-                    />
-                    <RechartsTooltip
-                      formatter={(rawValue: number | string, name: string) => {
-                        const numeric =
-                          typeof rawValue === "number"
-                            ? rawValue
-                            : Number(rawValue);
-                        const safeValue = Number.isFinite(numeric) ? numeric : 0;
-                        if (name === "Valor redimido (COP)") {
-                          return [formatValue(safeValue, "currency"), name];
-                        }
-                        return [formatNumber(safeValue), name];
-                      }}
-                      labelFormatter={(label: string, payload) => {
-                        const firstEntry = payload?.[0]?.payload as
-                          | SegmentRedemptionBreakdownEntry
-                          | undefined;
-                        const average =
-                          firstEntry &&
-                          typeof firstEntry.averageTicket === "number"
-                            ? formatValue(firstEntry.averageTicket, "currency")
-                            : "N/D";
-                        return `${label} · Ticket promedio: ${average}`;
-                      }}
-                    />
-                    <RechartsLegend
-                      verticalAlign="top"
-                      align="center"
-                      wrapperStyle={{ paddingBottom: 16 }}
-                    />
-                    <Bar
-                      yAxisId="counts"
-                      dataKey="uniqueRedeemers"
-                      name="Usuarios con redención"
-                      fill="#eb001b"
-                      radius={[4, 4, 0, 0]}
-                      isAnimationActive={false}
-                    />
-                    <Bar
-                      yAxisId="counts"
-                      dataKey="totalRedemptions"
-                      name="Redenciones totales"
-                      fill="#f79e1b"
-                      radius={[4, 4, 0, 0]}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      yAxisId="value"
-                      type="monotone"
-                      dataKey="redeemedValue"
-                      name="Valor redimido (COP)"
-                      stroke="#003087"
-                      strokeWidth={2}
-                      dot={{ r: 3 }}
-                      isAnimationActive={false}
-                    />
-                  </ReComposedChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              !loadingSummary && (
-                <div className="activity-empty">
-                  <Empty description="No hay redenciones suficientes para mostrar por segmento." />
-                </div>
-              )
-            )}
-          </Spin>
-        </div>
-      </Card>
     </Space>
   );
 };

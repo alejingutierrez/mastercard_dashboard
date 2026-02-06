@@ -11,8 +11,8 @@ Este documento complementa `README_lambda_proxy.md` y consolida la estructura de
 - dentsu_mastercard_davivienda_afluentes_3 — ✅ Acceso confirmado
 - dentsu_mastercard_pacifico_sag_5 — ✅ Acceso confirmado
 - dentsu_mastercard_pichincha — ✅ Acceso confirmado
+- dentsu_mastercard_guayaquil_5s_3 — ✅ Acceso confirmado (nombre correcto de la campaña Guayaquil 5S 3)
 - dentsu_mastercard_avvillas_combo_playero — ❌ Sin acceso (respuesta Lambda: (1049, "Unknown database 'dentsu_mastercard_avvillas_combo_playero'"))
-- dentsu_mastercard_guayaquil_5s_3 — ❌ Sin acceso (respuesta Lambda: (1049, "Unknown database 'dentsu_mastercard_guayaquil_5s_3'"))
 
 ## Observaciones transversales
 
@@ -2371,4 +2371,27 @@ No se obtuvo información de esta base. Respuesta Lambda: ``{"status": "error", 
 
 ## dentsu_mastercard_guayaquil_5s_3
 
-No se obtuvo información de esta base. Respuesta Lambda: ``{"status": "error", "errorType": "OperationalError", "errorMessage": "(1049, \"Unknown database 'dentsu_mastercard_guayaquil_5s_3'\")"}``.
+Base conectada y activa para la campaña Banco de Guayaquil 5S 3. Comparte la estructura estándar (`mc_users`, `mc_logins`, `mc_redemptions`, `mc_tracings`, etc.) utilizada en el resto de campañas, por lo que las consultas y métricas definidas en el backend funcionan sin cambios.
+
+Tablas detectadas mediante `SHOW TABLES` (invocación Lambda `mastercard-aurora-proxy`, 21-nov-2025):
+
+- Inventario_bonos
+- Segimiento_ganadores
+- mc_allies
+- mc_awards
+- mc_awards_logs
+- mc_cats
+- mc_codes
+- mc_faqs
+- mc_logins
+- mc_notifications_setups
+- mc_prepurchaseds
+- mc_quizzes
+- mc_redemptions
+- mc_settings
+- mc_terms
+- mc_tracings
+- mc_two_step_auths
+- mc_users
+
+> El levantamiento detallado de columnas y relaciones queda pendiente de documentación formal.
