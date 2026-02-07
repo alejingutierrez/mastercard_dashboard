@@ -886,6 +886,56 @@ const buildLoginsByIpQuery = ({ range }) => {
   return { sql, params };
 };
 
+// The "top logins by IP" query is intentionally limited for performance. For the security view
+// we still need correct login counts for IPs that appear in the top redemption-attempts list,
+// even if they are not in the top-N login IPs. This helper fetches login aggregates for a
+// specific list of IPs.
+const buildLoginsBySelectedIpsQuery = ({ range, ips }) => {
+  const safeIps = Array.isArray(ips)
+    ? ips
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter((value) => value.length > 0 && value !== "Sin IP")
+    : [];
+
+  if (safeIps.length === 0) {
+    return null;
+  }
+
+  const conditions = [
+    `(l.idmask IS NULL OR l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
+    `TRIM(l.ip) IN (${safeIps.map(() => "%s").join(", ")})`,
+  ];
+  const params = [...safeIps];
+
+  if (range) {
+    conditions.push("l.date BETWEEN %s AND %s");
+    params.push(range.from, range.to);
+  }
+
+  const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+  const sql = `
+    SELECT
+      COALESCE(NULLIF(TRIM(l.ip), ''), 'Sin IP') AS ip_label,
+      COUNT(*) AS total_logins,
+      COUNT(DISTINCT l.idmask) AS unique_users,
+      COUNT(
+        DISTINCT CASE
+          WHEN l.date REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+            THEN SUBSTRING(l.date, 1, 10)
+          ELSE NULL
+        END
+      ) AS active_days,
+      MIN(NULLIF(l.date, '0000-00-00 00:00:00')) AS first_login_at,
+      MAX(NULLIF(l.date, '0000-00-00 00:00:00')) AS last_login_at
+    FROM {db}.mc_logins l
+    ${whereClause}
+    GROUP BY ip_label;
+  `;
+
+  return { sql, params };
+};
+
 const buildRedemptionsByIpQuery = ({ range }) => {
   const conditions = [
     `(r.idmask IS NULL OR r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
@@ -3188,6 +3238,63 @@ router.get("/:id/login-security", async (req, res) => {
         firstLoginAt: row.first_login_at || null,
         lastLoginAt: row.last_login_at || null,
       });
+    }
+
+    // Ensure we have login aggregates for IPs with high redemption-attempt volume,
+    // even if they are not in the top login IPs list (loginsByIpQuery is limited).
+    if (hasLoginIpColumn) {
+      const redemptionIps = (redemptionsByIpResult.rows || [])
+        .map((row) => {
+          const raw = typeof row.ip_label === "string" ? row.ip_label.trim() : "";
+          return raw || "Sin IP";
+        })
+        .filter((value) => value !== "Sin IP");
+
+      const uniqueRedemptionIps = Array.from(new Set(redemptionIps));
+      const missingIps = uniqueRedemptionIps.filter((ip) => !loginIpMap.has(ip));
+
+      if (missingIps.length > 0) {
+        const selectedIpsQuery = buildLoginsBySelectedIpsQuery({ range, ips: missingIps });
+        if (selectedIpsQuery) {
+          const { sql: extraSql, params: extraParams } = applyFiltersToSql({
+            sql: selectedIpsQuery.sql,
+            params: selectedIpsQuery.params,
+            database: campaign.database,
+            baseTable: "mc_logins",
+            // Avoid re-applying userIp since we already constrain by IN (...).
+            filters: { loginType, userId, userIp: null },
+            range,
+          });
+
+          const extraResult = await executeWithDiagnostics("loginsBySelectedIps", {
+            sql: extraSql,
+            params: extraParams,
+          });
+
+          debugCounters.extraLoginIpsRequested = missingIps.length;
+          debugCounters.extraLoginIpsResolved = extraResult.rowCount ?? 0;
+
+          for (const row of extraResult.rows || []) {
+            const ipLabelRaw =
+              typeof row.ip_label === "string" ? row.ip_label.trim() : "";
+            const ip = ipLabelRaw || "Sin IP";
+            if (ip === "Sin IP") {
+              continue;
+            }
+            if (loginIpMap.has(ip)) {
+              continue;
+            }
+            loginIpMap.set(ip, {
+              ip,
+              totalLogins: toNumber(row.total_logins),
+              uniqueUsers: toNumber(row.unique_users),
+              activeDays: toNumber(row.active_days),
+              firstLoginAt: row.first_login_at || null,
+              lastLoginAt: row.last_login_at || null,
+            });
+          }
+        }
+      }
     }
 
     for (const row of redemptionsByIpResult.rows || []) {
