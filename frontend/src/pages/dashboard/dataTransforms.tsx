@@ -820,6 +820,36 @@ export const createLoginSecurityAtypicalColumns = (
       const popoverContent = (
         <div style={{ maxWidth: 440 }}>
           <Text strong>Motivos detectados</Text>
+          <div
+            style={{
+              marginTop: 10,
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "6px 14px",
+            }}
+          >
+            <Text type="secondary">
+              Dominante:{" "}
+              <Text strong>{formatPercentage(record.dominantRedeemerShare, 1)}</Text>
+            </Text>
+            <Text type="secondary">
+              Sin idmask:{" "}
+              <Text strong>{formatNumber(record.missingIdmaskAttempts)}</Text>
+            </Text>
+            <Text type="secondary">
+              Intentos/día:{" "}
+              <Text strong>
+                {typeof record.redemptionsPerActiveDay === "number" &&
+                Number.isFinite(record.redemptionsPerActiveDay)
+                  ? record.redemptionsPerActiveDay.toFixed(2)
+                  : "N/D"}
+              </Text>
+            </Text>
+            <Text type="secondary">
+              Intentos/Login:{" "}
+              <Text strong>{formatPercentage(record.conversionRate, 1)}</Text>
+            </Text>
+          </div>
           <div style={{ marginTop: 8 }}>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {safeReasons.map((reasonItem, index) => (
