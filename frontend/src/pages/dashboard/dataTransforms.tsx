@@ -1,6 +1,7 @@
 import {
   Button,
   Popconfirm,
+  Popover,
   Space,
   Tag,
   Tooltip,
@@ -48,6 +49,33 @@ export const SEVERITY_COLORS: Record<LoginSecurityAtypicalIp["severity"], string
 };
 
 export const MIN_PASSWORD_LENGTH = 8;
+
+const summarizeAtypicalReason = (reason: string): string => {
+  const raw = typeof reason === "string" ? reason.trim() : "";
+  if (!raw) {
+    return "Motivo";
+  }
+
+  const mappings: { test: RegExp; label: string }[] = [
+    { test: /Volumen elevado/i, label: "Volumen alto" },
+    { test: /concentrados en un único idmask/i, label: "Concentración" },
+    { test: /ventana temporal muy corta/i, label: "Ráfaga" },
+    { test: /Conversión login→intento/i, label: "Alta conversión" },
+    { test: /pocos canjean/i, label: "Pocos canjeadores" },
+    { test: /intentos de redención por día activo/i, label: "Int/día alto" },
+  ];
+
+  for (const mapping of mappings) {
+    if (mapping.test.test(raw)) {
+      return mapping.label;
+    }
+  }
+
+  if (raw.length <= 26) {
+    return raw;
+  }
+  return `${raw.slice(0, 24)}…`;
+};
 
 export type ActivityChartPoint = ActivityResponse["points"][number] & {
   day?: Date;
@@ -686,6 +714,8 @@ export const createLoginSecurityAtypicalColumns = (
     title: "Nivel",
     dataIndex: "severity",
     key: "severity",
+    width: 96,
+    fixed: "left",
     render: (value: LoginSecurityAtypicalIp["severity"]) => (
       <Tag color={SEVERITY_COLORS[value]}>{SEVERITY_LABELS[value]}</Tag>
     ),
@@ -694,6 +724,8 @@ export const createLoginSecurityAtypicalColumns = (
     title: "IP",
     dataIndex: "ip",
     key: "ip",
+    width: 210,
+    fixed: "left",
     render: (value: string) => (
       <Space size={6}>
         <Text code copyable={{ text: value }}>
@@ -714,29 +746,25 @@ export const createLoginSecurityAtypicalColumns = (
     ),
   },
   {
-    title: "Logins / usuarios",
-    key: "logins",
+    title: "Actividad",
+    key: "activity",
+    width: 290,
     render: (_: unknown, record) => (
       <Space direction="vertical" size={0}>
-        <Text strong>{formatNumber(record.totalLogins)}</Text>
-        <Text type="secondary">
-          Usuarios: {formatNumber(record.uniqueUsers)}
-        </Text>
-      </Space>
-    ),
-  },
-  {
-    title: "Intentos / usuarios",
-    key: "redemptions",
-    render: (_: unknown, record) => (
-      <Space direction="vertical" size={0}>
-        <Text strong>{formatNumber(record.redemptionAttempts)}</Text>
-        <Text type="secondary">
-          Usuarios: {formatNumber(record.uniqueAttemptRedeemers)}
+        <Text strong>
+          Intentos: {formatNumber(record.redemptionAttempts)}{" "}
+          <Text type="secondary">
+            ({formatNumber(record.uniqueAttemptRedeemers)} usuarios)
+          </Text>
         </Text>
         <Text type="secondary">
-          Válidas: {formatNumber(record.validRedemptions)} · Valor:{" "}
+          Válidas: {formatNumber(record.validRedemptions)} (
+          {formatNumber(record.uniqueRedeemers)} usuarios) ·{" "}
           {formatValue(record.redeemedValue, "currency")}
+        </Text>
+        <Text type="secondary">
+          Logins: {formatNumber(record.totalLogins)} (
+          {formatNumber(record.uniqueUsers)} usuarios)
         </Text>
       </Space>
     ),
@@ -745,22 +773,14 @@ export const createLoginSecurityAtypicalColumns = (
     title: "Intentos/Login",
     dataIndex: "conversionRate",
     key: "conversionRate",
+    width: 140,
     align: "right",
     render: (value: number) => formatPercentage(value),
   },
   {
-    title: "Intentos/día activo",
-    dataIndex: "redemptionsPerActiveDay",
-    key: "redemptionsPerActiveDay",
-    align: "right",
-    render: (value: number | null) =>
-      typeof value === "number" && Number.isFinite(value)
-        ? value.toFixed(2)
-        : "N/D",
-  },
-  {
-    title: "Ventana de actividad",
+    title: "Ventana",
     key: "activityWindow",
+    width: 280,
     render: (_: unknown, record) => {
       const rangeLabel =
         record.firstActivityAt && record.lastActivityAt
@@ -782,21 +802,53 @@ export const createLoginSecurityAtypicalColumns = (
     },
   },
   {
-    title: "Motivos detectados",
+    title: "Señales",
     dataIndex: "reasons",
     key: "reasons",
-    render: (reasons: string[]) =>
-      reasons.length > 0 ? (
-        <Space size={[4, 4]} wrap>
-          {reasons.map((reason) => (
-            <Tag key={reason} color="magenta">
-              {reason}
-            </Tag>
-          ))}
-        </Space>
-      ) : (
-        <Text type="secondary">Sin patrones atípicos</Text>
-      ),
+    width: 320,
+    render: (reasons: string[], record) => {
+      const safeReasons = Array.isArray(reasons) ? reasons : [];
+      if (safeReasons.length === 0) {
+        return <Text type="secondary">Sin señales</Text>;
+      }
+
+      const summaries = safeReasons.map(summarizeAtypicalReason);
+      const uniqueSummaries = Array.from(new Set(summaries));
+      const shown = uniqueSummaries.slice(0, 2);
+      const remaining = Math.max(uniqueSummaries.length - shown.length, 0);
+
+      const popoverContent = (
+        <div style={{ maxWidth: 440 }}>
+          <Text strong>Motivos detectados</Text>
+          <div style={{ marginTop: 8 }}>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {safeReasons.map((reasonItem, index) => (
+                <li key={`${record.ip}-${index}`}>
+                  <Text>{reasonItem}</Text>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      );
+
+      return (
+        <Popover
+          content={popoverContent}
+          trigger={["hover", "click"]}
+          placement="topLeft"
+        >
+          <Space size={[6, 6]} wrap>
+            {shown.map((label) => (
+              <Tag key={`${record.ip}-${label}`} color="magenta">
+                {label}
+              </Tag>
+            ))}
+            {remaining > 0 ? <Tag>{`+${remaining}`}</Tag> : null}
+          </Space>
+        </Popover>
+      );
+    },
   },
 ];
 

@@ -437,9 +437,11 @@ const LoginSecuritySection = ({
                 columns={atypicalColumns}
                 dataSource={atypicalRows}
                 rowKey="ip"
+                tableLayout="fixed"
                 size="small"
                 pagination={{ pageSize: 8, hideOnSinglePage: true }}
                 sticky
+                scroll={{ x: 1400 }}
                 locale={{
                   emptyText: (
                     <Empty description="No se detectaron patrones atípicos con los filtros actuales." />
