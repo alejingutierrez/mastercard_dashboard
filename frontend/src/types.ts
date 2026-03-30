@@ -53,6 +53,7 @@ export interface ActivityPoint {
   loginsCount: number;
   loginsAvg7: number | null;
   uniqueLoginUsers: number;
+  newUsersCount: number;
   redemptionsCount: number;
   redemptionsAvg7: number | null;
   redemptionAttemptsCount: number;

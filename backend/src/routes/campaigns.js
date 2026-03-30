@@ -1967,6 +1967,68 @@ const buildLoginSeriesQuery = ({
   return { sql, params };
 };
 
+const buildNewUsersSeriesQuery = ({
+  range,
+  segment,
+  userType,
+  userId,
+}) => {
+  const needsUserJoin = Boolean(segment || userType);
+  const innerConditions = [
+    `l.idmask IS NOT NULL`,
+    `TRIM(l.idmask) <> ''`,
+    `l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    `l.date IS NOT NULL`,
+    `l.date <> '0000-00-00 00:00:00'`,
+  ];
+  const params = ["%Y-%m-%d"];
+
+  if (segment) {
+    innerConditions.push("u.segment = %s");
+    params.push(segment);
+  }
+
+  if (userType) {
+    innerConditions.push("u.user_type = %s");
+    params.push(userType);
+  }
+
+  if (userId) {
+    innerConditions.push("l.idmask = %s");
+    params.push(userId);
+  }
+
+  const joinClause = needsUserJoin
+    ? "LEFT JOIN {db}.mc_users u ON u.idmask = l.idmask"
+    : "";
+
+  const outerConditions = ["first_login IS NOT NULL"];
+  if (range) {
+    outerConditions.push("DATE(first_login) BETWEEN %s AND %s");
+    params.push(range.from, range.to);
+  }
+
+  const sql = `
+    SELECT
+      DATE_FORMAT(first_login, %s) AS activity_date,
+      COUNT(*) AS new_users
+    FROM (
+      SELECT
+        l.idmask,
+        MIN(l.date) AS first_login
+      FROM {db}.mc_logins l
+      ${joinClause}
+      WHERE ${innerConditions.join(" AND ")}
+      GROUP BY l.idmask
+    ) AS first_logins
+    WHERE ${outerConditions.join(" AND ")}
+    GROUP BY activity_date
+    ORDER BY activity_date;
+  `;
+
+  return { sql, params };
+};
+
 const buildRedemptionSeriesQuery = ({
   range,
   segment,
@@ -2253,6 +2315,7 @@ const mergeSeriesRows = (aggregateMap, rows, keyMap) => {
     const entry = aggregateMap.get(date) || {
       loginsCount: 0,
       uniqueLoginUsers: 0,
+      newUsersCount: 0,
       redemptionsCount: 0,
       uniqueRedeemers: 0,
       redeemedValue: 0,
@@ -2263,6 +2326,9 @@ const mergeSeriesRows = (aggregateMap, rows, keyMap) => {
     }
     if (keyMap.uniqueLoginUsers) {
       entry.uniqueLoginUsers += Number(row[keyMap.uniqueLoginUsers] ?? 0);
+    }
+    if (keyMap.newUsersCount) {
+      entry.newUsersCount += Number(row[keyMap.newUsersCount] ?? 0);
     }
     if (keyMap.redemptionsCount) {
       entry.redemptionsCount += Number(row[keyMap.redemptionsCount] ?? 0);
@@ -2506,6 +2572,7 @@ router.get("/:id/activity", async (req, res) => {
         redemptionSeriesQuery,
         loginTypeDistributionQuery,
         loginHeatmapQuery,
+        newUsersSeriesQuery,
       ] = [
         buildLoginSeriesQuery({
           range,
@@ -2539,6 +2606,12 @@ router.get("/:id/activity", async (req, res) => {
           userId,
           userIp,
         }),
+        buildNewUsersSeriesQuery({
+          range,
+          segment,
+          userType,
+          userId,
+        }),
       ];
 
       const [
@@ -2546,6 +2619,7 @@ router.get("/:id/activity", async (req, res) => {
         redemptionSeries,
         loginTypeDistributionResult,
         loginHeatmapResult,
+        newUsersSeries,
         campaignLoginTypes,
         campaignSegments,
         campaignUserTypes,
@@ -2558,6 +2632,7 @@ router.get("/:id/activity", async (req, res) => {
           loginTypeDistributionQuery.params
         ),
         runQuery(campaign.database, loginHeatmapQuery.sql, loginHeatmapQuery.params),
+        runQuery(campaign.database, newUsersSeriesQuery.sql, newUsersSeriesQuery.params),
         collectLoginTypes(campaign.database),
         includeFilters ? collectSegments(campaign.database) : Promise.resolve([]),
         includeFilters ? collectUserTypes(campaign.database) : Promise.resolve([]),
@@ -2575,6 +2650,10 @@ router.get("/:id/activity", async (req, res) => {
         redemptionAttemptsCount: "total_attempts",
         uniqueAttemptRedeemers: "unique_attempt_users",
         missingIdmaskAttempts: "missing_idmask_attempts",
+      });
+
+      mergeSeriesRows(aggregateMap, newUsersSeries.rows, {
+        newUsersCount: "new_users",
       });
 
       for (const row of loginTypeDistributionResult.rows || []) {
@@ -2664,6 +2743,7 @@ router.get("/:id/activity", async (req, res) => {
         date,
         loginsCount,
         uniqueLoginUsers: entry?.uniqueLoginUsers ?? 0,
+        newUsersCount: entry?.newUsersCount ?? 0,
         redemptionsCount,
         redemptionAttemptsCount,
         uniqueRedeemers: entry?.uniqueRedeemers ?? 0,

@@ -557,10 +557,9 @@ const ActivitySection = ({
                   <div className="activity-separator" />
                 </div>
                 <Text type="secondary" className="activity-subtitle">
-                  Cantidad de usuarios únicos con login y total de logins por
-                  día, aplicando los filtros actuales. Los usuarios de mc_users
-                  no tienen fecha de inscripción, por lo que se muestra la
-                  actividad diaria como referencia.
+                  Usuarios inscritos por fecha: cada usuario se cuenta una sola
+                  vez, el día en que realizó su primer login (autologin o login
+                  exitoso) en la campaña.
                 </Text>
               </div>
               <div className="activity-body">
@@ -589,16 +588,15 @@ const USER_ACTIVITY_COLUMNS: ColumnsType<ActivityChartPoint> = [
     title: "Fecha",
     dataIndex: "dateLabel",
     key: "dateLabel",
-    sorter: (a, b) =>
-      (a.date ?? "").localeCompare(b.date ?? ""),
+    sorter: (a, b) => (a.date ?? "").localeCompare(b.date ?? ""),
     defaultSortOrder: "ascend",
   },
   {
-    title: "Usuarios únicos con login",
-    dataIndex: "uniqueLoginUsers",
-    key: "uniqueLoginUsers",
+    title: "Usuarios inscritos (primer login)",
+    dataIndex: "newUsersCount",
+    key: "newUsersCount",
     align: "right",
-    sorter: (a, b) => (a.uniqueLoginUsers ?? 0) - (b.uniqueLoginUsers ?? 0),
+    sorter: (a, b) => (a.newUsersCount ?? 0) - (b.newUsersCount ?? 0),
     render: (value: number) =>
       typeof value === "number" ? new Intl.NumberFormat("es-ES").format(value) : "N/D",
   },
