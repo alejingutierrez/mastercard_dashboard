@@ -8,10 +8,12 @@ import {
   Row,
   Space,
   Spin,
+  Table,
   Tag,
   Tooltip,
   Typography,
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import {
   CartesianGrid,
   Legend as RechartsLegend,
@@ -543,8 +545,81 @@ const ActivitySection = ({
         </Col>
       </Row>
 
+      {activityDataset.length > 0 && (
+        <Row gutter={[24, 32]}>
+          <Col xs={24}>
+            <Card className="activity-card">
+              <div className="activity-heading">
+                <div className="activity-header">
+                  <Title level={4} className="activity-title">
+                    Usuarios activos por fecha
+                  </Title>
+                  <div className="activity-separator" />
+                </div>
+                <Text type="secondary" className="activity-subtitle">
+                  Cantidad de usuarios únicos con login y total de logins por
+                  día, aplicando los filtros actuales. Los usuarios de mc_users
+                  no tienen fecha de inscripción, por lo que se muestra la
+                  actividad diaria como referencia.
+                </Text>
+              </div>
+              <div className="activity-body">
+                <Spin spinning={loadingActivity}>
+                  <Table<ActivityChartPoint>
+                    dataSource={activityDataset}
+                    rowKey="date"
+                    size="small"
+                    pagination={{ pageSize: 15, showSizeChanger: false }}
+                    scroll={{ x: true }}
+                    columns={USER_ACTIVITY_COLUMNS}
+                  />
+                </Spin>
+              </div>
+            </Card>
+          </Col>
+        </Row>
+      )}
+
     </Space>
   );
 };
+
+const USER_ACTIVITY_COLUMNS: ColumnsType<ActivityChartPoint> = [
+  {
+    title: "Fecha",
+    dataIndex: "dateLabel",
+    key: "dateLabel",
+    sorter: (a, b) =>
+      (a.date ?? "").localeCompare(b.date ?? ""),
+    defaultSortOrder: "ascend",
+  },
+  {
+    title: "Usuarios únicos con login",
+    dataIndex: "uniqueLoginUsers",
+    key: "uniqueLoginUsers",
+    align: "right",
+    sorter: (a, b) => (a.uniqueLoginUsers ?? 0) - (b.uniqueLoginUsers ?? 0),
+    render: (value: number) =>
+      typeof value === "number" ? new Intl.NumberFormat("es-ES").format(value) : "N/D",
+  },
+  {
+    title: "Logins del día",
+    dataIndex: "loginsCount",
+    key: "loginsCount",
+    align: "right",
+    sorter: (a, b) => (a.loginsCount ?? 0) - (b.loginsCount ?? 0),
+    render: (value: number) =>
+      typeof value === "number" ? new Intl.NumberFormat("es-ES").format(value) : "N/D",
+  },
+  {
+    title: "Redenciones válidas",
+    dataIndex: "redemptionsCount",
+    key: "redemptionsCount",
+    align: "right",
+    sorter: (a, b) => (a.redemptionsCount ?? 0) - (b.redemptionsCount ?? 0),
+    render: (value: number) =>
+      typeof value === "number" ? new Intl.NumberFormat("es-ES").format(value) : "N/D",
+  },
+];
 
 export default ActivitySection;
