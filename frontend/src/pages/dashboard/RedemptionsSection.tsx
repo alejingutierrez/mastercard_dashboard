@@ -26,6 +26,7 @@ import {
 } from "recharts";
 import type { ColumnsType } from "antd/es/table";
 import type { RedemptionInsightsResponse } from "../../types";
+import type { EnrollmentFunnelLayer } from "../../api/campaigns";
 import {
   formatNumber,
   formatValue,
@@ -51,6 +52,8 @@ interface RedemptionsSectionProps {
   heatmapData: RedemptionHeatmapData;
   tableColumns: ColumnsType<RedemptionTableRow>;
   tableData: RedemptionTableRow[];
+  enrollmentFunnel: EnrollmentFunnelLayer[];
+  loadingEnrollmentFunnel: boolean;
 }
 
 const RedemptionsSection = ({
@@ -63,6 +66,8 @@ const RedemptionsSection = ({
   heatmapData,
   tableColumns,
   tableData,
+  enrollmentFunnel,
+  loadingEnrollmentFunnel,
 }: RedemptionsSectionProps) => {
   if (selectedCampaign === "all") {
     return (
@@ -83,6 +88,7 @@ const RedemptionsSection = ({
   const hasTableData = tableData.length > 0;
 
   return (
+    <>
     <Spin spinning={loading}>
       {redemptionInsights ? (
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
@@ -353,6 +359,7 @@ const RedemptionsSection = ({
               </Card>
             </Col>
           </Row>
+
         </Space>
       ) : (
         <Card>
@@ -360,6 +367,66 @@ const RedemptionsSection = ({
         </Card>
       )}
     </Spin>
+
+    {/* Funnel de inscripción — independiente de redemptionInsights */}
+    <Spin spinning={loadingEnrollmentFunnel}>
+      <Card className="activity-card" style={{ marginTop: 24 }}>
+        <div className="activity-heading">
+          <div className="activity-header">
+            <Title level={4} className="activity-title">
+              Inscripción por etapa de conversión
+            </Title>
+            <div className="activity-separator" />
+          </div>
+          <Text type="secondary" className="activity-subtitle">
+            Usuarios inscritos (con login) vs no inscritos en cada etapa del funnel de la campaña.
+          </Text>
+        </div>
+        <div className="activity-body">
+          {enrollmentFunnel.length > 0 ? (
+            <ResponsiveContainer width="100%" height={enrollmentFunnel.length * 60 + 60}>
+              <ReBarChart
+                layout="vertical"
+                data={enrollmentFunnel}
+                margin={{ top: 16, right: 40, left: 160, bottom: 16 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis
+                  type="number"
+                  tickFormatter={(v: number) => formatNumber(v)}
+                  tick={{ fontSize: 12 }}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="layer"
+                  tick={{ fontSize: 12 }}
+                  width={155}
+                />
+                <RechartsTooltip
+                  formatter={(value: number | string, name: string) => {
+                    const num = typeof value === "number" ? value : Number(value);
+                    const label = name === "inscritos" ? "Inscritos" : "No inscritos";
+                    return [formatNumber(num), label];
+                  }}
+                />
+                <RechartsLegend
+                  formatter={(value: string) =>
+                    value === "inscritos" ? "Inscritos" : "No inscritos"
+                  }
+                />
+                <Bar dataKey="inscritos" name="inscritos" stackId="a" fill="#1677ff" isAnimationActive={false} />
+                <Bar dataKey="no_inscritos" name="no_inscritos" stackId="a" fill="#d9d9d9" isAnimationActive={false} />
+              </ReBarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="activity-empty">
+              <Empty description="Sin datos de inscripción para los filtros seleccionados." />
+            </div>
+          )}
+        </div>
+      </Card>
+    </Spin>
+    </>
   );
 };
 

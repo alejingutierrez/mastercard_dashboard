@@ -8,7 +8,7 @@
     "status": "active",
     "passwordHash": "$2a$10$8vpKY2ta.McWnvzkpzWEausxi.60CjRk0rIFwaVg2x2YeKlt..xQe",
     "createdAt": "2025-10-21T19:22:00.347Z",
-    "updatedAt": "2025-10-21T19:22:00.347Z",
+    "updatedAt": "2026-04-16T20:59:28.948Z",
     "allowedCampaignIds": [
       "debitazo-5",
       "bogota-uso-10",
@@ -17,8 +17,10 @@
       "pacifico-sag-5",
       "pichincha",
       "tuya-ola-5",
+      "tuya-ola-6",
       "pacifico-5s-4",
-      "avvillas-combo-playero"
+      "avvillas-combo-playero",
+      "pongalas-a-jugar"
     ],
     "mustResetPassword": false
   },
@@ -40,8 +42,10 @@
       "pacifico-sag-5",
       "pichincha",
       "tuya-ola-5",
+      "tuya-ola-6",
       "pacifico-5s-4",
-      "avvillas-combo-playero"
+      "avvillas-combo-playero",
+      "pongalas-a-jugar"
     ],
     "mustResetPassword": false
   },
@@ -63,8 +67,10 @@
       "pacifico-sag-5",
       "pichincha",
       "tuya-ola-5",
+      "tuya-ola-6",
       "pacifico-5s-4",
-      "avvillas-combo-playero"
+      "avvillas-combo-playero",
+      "pongalas-a-jugar"
     ],
     "mustResetPassword": false
   }

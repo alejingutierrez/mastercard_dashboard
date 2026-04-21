@@ -49,13 +49,68 @@ router.use((req, res, next) => {
 });
 
 router.get("/", (req, res) => {
-  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description }) => ({
+  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description, features, baselineUsers, enrollmentGoals }) => ({
     id,
     name,
     description,
+    features: features ?? {},
+    baselineUsers: baselineUsers ?? null,
+    enrollmentGoals: enrollmentGoals ?? null,
   }));
 
   res.json(liteCampaigns);
+});
+
+// Diagnóstico: muestra todas las filas de mc_settings por campaña (key + value)
+router.get("/admin/settings-check", async (req, res) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ error: "Solo administradores pueden usar este endpoint." });
+  }
+
+  const results = await Promise.all(
+    CAMPAIGNS.map(async ({ id, name, database }) => {
+      try {
+        const result = await runQuery(
+          database,
+          `SELECT \`key\`, value FROM {db}.mc_settings ORDER BY \`key\` ASC LIMIT 50;`,
+          []
+        );
+        const rows = result.rows || [];
+        return {
+          id,
+          name,
+          database,
+          hasSettings: rows.length > 0,
+          rows: rows.map((r) => ({ key: r.key, value: r.value })),
+        };
+      } catch (err) {
+        const msg = err?.message || "";
+        const tableNotFound =
+          /Table.*doesn't exist/i.test(msg) ||
+          /1146/.test(msg);
+        return {
+          id,
+          name,
+          database,
+          hasSettings: false,
+          rows: [],
+          error: tableNotFound ? "Tabla mc_settings no existe" : msg,
+        };
+      }
+    })
+  );
+
+  const withSettings = results.filter((r) => r.hasSettings);
+  const withoutSettings = results.filter((r) => !r.hasSettings);
+
+  res.json({
+    summary: {
+      total: results.length,
+      withSettings: withSettings.length,
+      withoutSettings: withoutSettings.length,
+    },
+    campaigns: results,
+  });
 });
 
 const normalizeSelectorValue = (value) => {
@@ -236,8 +291,8 @@ const applyFiltersToSql = ({
   filters = {},
   range,
 }) => {
-  const { loginType, userId, userIp } = filters;
-  if (!loginType && !userId && !userIp) {
+  const { loginType, userId, userIp, segment, userType } = filters;
+  if (!loginType && !userId && !userIp && !segment && !userType) {
     return { sql, params };
   }
 
@@ -275,6 +330,32 @@ const applyFiltersToSql = ({
   if (loginType && tableCapabilities.hasType) {
     additionalConditions.push(`${columnRef("type")} = %s`);
     nextParams.push(loginType);
+  }
+
+  // segment filter: subquery into mc_users
+  if (segment && tableCapabilities.hasIdmask) {
+    if (baseTableName === "mc_users") {
+      additionalConditions.push(`TRIM(${columnRef("segment")}) = %s`);
+      nextParams.push(segment);
+    } else {
+      additionalConditions.push(
+        `${columnRef("idmask")} IN (SELECT idmask FROM {db}.mc_users WHERE TRIM(segment) = %s)`
+      );
+      nextParams.push(segment);
+    }
+  }
+
+  // userType filter: subquery into mc_users
+  if (userType && tableCapabilities.hasIdmask) {
+    if (baseTableName === "mc_users") {
+      additionalConditions.push(`${columnRef("user_type")} = %s`);
+      nextParams.push(userType);
+    } else {
+      additionalConditions.push(
+        `${columnRef("idmask")} IN (SELECT idmask FROM {db}.mc_users WHERE user_type = %s)`
+      );
+      nextParams.push(userType);
+    }
   }
 
   const needsLoginTypeSubquery =
@@ -420,6 +501,7 @@ const buildMonthlyRedemptionSummaryQuery = ({
     "r.idmask IS NOT NULL",
     "TRIM(r.idmask) <> ''",
     `r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`,
+    "r.block IN (1, 2)",
     "r.id_award IS NOT NULL",
     "r.id_award <> 0",
     "r.value IS NOT NULL",
@@ -1548,7 +1630,9 @@ router.get("/:id/summary", async (req, res) => {
     const loginType = normalizeSelectorValue(req.query.loginType);
     const userId = normalizeSelectorValue(req.query.userId);
     const userIp = normalizeSelectorValue(req.query.userIp);
-    const filters = { loginType, userId, userIp };
+    const segment = normalizeSelectorValue(req.query.segment);
+    const userType = normalizeSelectorValue(req.query.userType);
+    const filters = { loginType, userId, userIp, segment, userType };
 
     const metricsPromise = Promise.all(
       (campaign.metrics || []).map(async (metric) => {
@@ -1568,13 +1652,24 @@ router.get("/:id/summary", async (req, res) => {
           range,
         });
 
-        const result = await runQuery(campaign.database, filteredSql, filteredParams);
-        const value = result.rows?.[0]?.value ?? null;
+        let value = null;
+        try {
+          const result = await runQuery(campaign.database, filteredSql, filteredParams);
+          value = result.rows?.[0]?.value ?? null;
+        } catch (err) {
+          if (metric.hidden) {
+            // Metric is optional (e.g. mc_settings may not exist for all campaigns)
+            value = null;
+          } else {
+            throw err;
+          }
+        }
 
         return {
           key: metric.key,
           label: metric.label,
           value,
+          hidden: metric.hidden ?? false,
         };
       })
     );
@@ -1661,6 +1756,265 @@ router.get("/:id/summary", async (req, res) => {
   }
 });
 
+router.get("/:id/segments", async (req, res) => {
+  const campaign = req.allowedCampaigns.find(({ id }) => id === req.params.id);
+  if (!campaign) {
+    const isKnownCampaign = Boolean(getCampaignById(req.params.id));
+    return res.status(isKnownCampaign ? 403 : 404).json({
+      error: isKnownCampaign ? "No tienes acceso a esta campaña." : "Campaña no encontrada",
+    });
+  }
+  try {
+    const segments = await collectSegments(campaign.database);
+    res.json({ segments });
+  } catch (error) {
+    console.error("[segments] Error", error);
+    res.status(500).json({ error: "No se pudo obtener los segmentos", detail: error.message });
+  }
+});
+
+router.get("/:id/user-types", async (req, res) => {
+  const campaign = req.allowedCampaigns.find(({ id }) => id === req.params.id);
+  if (!campaign) {
+    const isKnownCampaign = Boolean(getCampaignById(req.params.id));
+    return res.status(isKnownCampaign ? 403 : 404).json({
+      error: isKnownCampaign ? "No tienes acceso a esta campaña." : "Campaña no encontrada",
+    });
+  }
+  try {
+    const userTypes = await collectUserTypes(campaign.database);
+    res.json({ userTypes });
+  } catch (error) {
+    console.error("[user-types] Error", error);
+    res.status(500).json({ error: "No se pudo obtener los tipos de usuario", detail: error.message });
+  }
+});
+
+router.get("/:id/enrollment-funnel", async (req, res) => {
+  const campaign = req.allowedCampaigns.find(({ id }) => id === req.params.id);
+  if (!campaign) {
+    const isKnownCampaign = Boolean(getCampaignById(req.params.id));
+    return res.status(isKnownCampaign ? 403 : 404).json({
+      error: isKnownCampaign ? "No tienes acceso a esta campaña." : "Campaña no encontrada",
+    });
+  }
+
+  try {
+    // "Inscrito" = ha hecho al menos un login exitoso (type=1) o autologin (type=2) alguna vez.
+    // Sin filtro de fecha: el estado de inscripción es permanente.
+    const inscritoSubquery = `SELECT DISTINCT idmask FROM {db}.mc_logins
+      WHERE type IN (1, 2)
+        AND idmask IS NOT NULL AND TRIM(idmask) <> ''
+        AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`;
+
+    // Capa 1: base total desde mc_users
+    const totalUsersQuery = `
+      SELECT
+        'Usuarios Totales' AS layer,
+        SUM(CASE WHEN u.idmask IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS inscritos,
+        SUM(CASE WHEN u.idmask NOT IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS no_inscritos
+      FROM {db}.mc_users u
+      WHERE u.idmask IS NOT NULL AND TRIM(u.idmask) <> ''
+        AND u.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}`;
+
+    // Capa 2: ganadores Meta 1 desde mc_tracings.winner_1
+    const winner1Query = `
+      SELECT
+        'Ganador Meta 1' AS layer,
+        SUM(CASE WHEN t.idmask IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS inscritos,
+        SUM(CASE WHEN t.idmask NOT IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS no_inscritos
+      FROM {db}.mc_tracings t
+      WHERE t.idmask IS NOT NULL AND TRIM(t.idmask) <> ''
+        AND t.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+        AND t.winner_1 IS NOT NULL AND t.winner_1 <> '' AND t.winner_1 <> '0'`;
+
+    // Detectar si mc_tracings existe y si winner_2 existe
+    let hasTracings = false;
+    let hasWinner2 = false;
+    try {
+      await runQuery(campaign.database, `SELECT winner_1 FROM {db}.mc_tracings LIMIT 1;`, []);
+      hasTracings = true;
+    } catch {
+      hasTracings = false;
+    }
+    if (hasTracings) {
+      try {
+        await runQuery(campaign.database, `SELECT winner_2 FROM {db}.mc_tracings LIMIT 1;`, []);
+        hasWinner2 = true;
+      } catch {
+        hasWinner2 = false;
+      }
+    }
+
+    // Capa 3 (opcional): ganadores Meta 2 desde mc_tracings.winner_2
+    const winner2Query = `
+      SELECT
+        'Ganador Meta 2' AS layer,
+        SUM(CASE WHEN t.idmask IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS inscritos,
+        SUM(CASE WHEN t.idmask NOT IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS no_inscritos
+      FROM {db}.mc_tracings t
+      WHERE t.idmask IS NOT NULL AND TRIM(t.idmask) <> ''
+        AND t.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+        AND t.winner_2 IS NOT NULL AND t.winner_2 <> '' AND t.winner_2 <> '0'`;
+
+    // Detectar si la columna block existe en mc_redemptions (campañas viejas pueden no tenerla)
+    let hasBlock = false;
+    try {
+      await runQuery(
+        campaign.database,
+        `SELECT block FROM {db}.mc_redemptions LIMIT 1;`,
+        []
+      );
+      hasBlock = true;
+    } catch {
+      hasBlock = false;
+    }
+
+    // Detectar si hay redenciones con block=2 (campañas de una sola meta no tendrán)
+    let hasBlock2 = false;
+    if (hasBlock) {
+      try {
+        const b2check = await runQuery(
+          campaign.database,
+          `SELECT 1 FROM {db}.mc_redemptions WHERE block = 2 AND value > 0 LIMIT 1;`,
+          []
+        );
+        hasBlock2 = (b2check.rows || []).length > 0;
+      } catch {
+        hasBlock2 = false;
+      }
+    }
+
+    // Capa: Redimió Meta 1 — usuarios únicos con redención válida block=1
+    const redeemMeta1Query = `
+      SELECT
+        'Redimió Meta 1' AS layer,
+        SUM(CASE WHEN r.idmask IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS inscritos,
+        SUM(CASE WHEN r.idmask NOT IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS no_inscritos
+      FROM (
+        SELECT DISTINCT idmask
+        FROM {db}.mc_redemptions
+        WHERE block = 1
+          AND idmask IS NOT NULL AND TRIM(idmask) <> ''
+          AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+          AND id_award IS NOT NULL AND id_award <> 0
+          AND value IS NOT NULL AND value > 0
+          AND date IS NOT NULL AND date <> '0000-00-00 00:00:00'
+      ) r`;
+
+    // Capa: Redimió Meta 2 — mismo patrón con block=2
+    const redeemMeta2Query = `
+      SELECT
+        'Redimió Meta 2' AS layer,
+        SUM(CASE WHEN r.idmask IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS inscritos,
+        SUM(CASE WHEN r.idmask NOT IN (${inscritoSubquery}) THEN 1 ELSE 0 END) AS no_inscritos
+      FROM (
+        SELECT DISTINCT idmask
+        FROM {db}.mc_redemptions
+        WHERE block = 2
+          AND idmask IS NOT NULL AND TRIM(idmask) <> ''
+          AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+          AND id_award IS NOT NULL AND id_award <> 0
+          AND value IS NOT NULL AND value > 0
+          AND date IS NOT NULL AND date <> '0000-00-00 00:00:00'
+      ) r`;
+
+    // Orden: Totales → Ganador Meta 1 → Redimió Meta 1 → Ganador Meta 2 → Redimió Meta 2
+    const queries = [{ label: "Usuarios Totales", sql: totalUsersQuery }];
+    if (hasTracings) queries.push({ label: "Ganador Meta 1", sql: winner1Query });
+    if (hasBlock) queries.push({ label: "Redimió Meta 1", sql: redeemMeta1Query });
+    if (hasTracings && hasWinner2) queries.push({ label: "Ganador Meta 2", sql: winner2Query });
+    if (hasBlock && hasBlock2) queries.push({ label: "Redimió Meta 2", sql: redeemMeta2Query });
+
+    const results = await Promise.all(
+      queries.map(({ sql }) => runQuery(campaign.database, sql, []))
+    );
+
+    const layers = results.map((r, i) => {
+      const row = (r.rows || [])[0] || {};
+      return {
+        layer: queries[i].label,
+        inscritos: Number(row.inscritos) || 0,
+        no_inscritos: Number(row.no_inscritos) || 0,
+      };
+    });
+
+    res.json({ layers });
+  } catch (error) {
+    console.error("[enrollment-funnel] Error", error);
+    res.status(500).json({ error: "No se pudo obtener el embudo de inscripción", detail: error.message });
+  }
+});
+
+router.get("/:id/first-logins-by-date", async (req, res) => {
+  const campaign = req.allowedCampaigns.find(({ id }) => id === req.params.id);
+  if (!campaign) {
+    const isKnownCampaign = Boolean(getCampaignById(req.params.id));
+    return res.status(isKnownCampaign ? 403 : 404).json({
+      error: isKnownCampaign ? "No tienes acceso a esta campaña." : "Campaña no encontrada",
+    });
+  }
+
+  const range = parseDateRange(req.query);
+  const segment = normalizeSelectorValue(req.query.segment);
+  const userType = normalizeSelectorValue(req.query.userType);
+
+  try {
+    // Cargar segmentos reales de la campaña para construir columnas dinámicas
+    const campaignSegments = await collectSegments(campaign.database);
+
+    const toAlias = (seg) => "seg_" + seg.toLowerCase().replace(/[^a-z0-9]/g, "_");
+    const escapeStr = (s) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+    const segCases = campaignSegments.map(
+      (seg) =>
+        `SUM(CASE WHEN TRIM(COALESCE(u.segment,'')) = '${escapeStr(seg)}' THEN 1 ELSE 0 END) AS ${toAlias(seg)}`
+    );
+
+    const dateFilter = range
+      ? `AND t.first_login BETWEEN '${range.from}' AND '${range.to}'`
+      : "";
+    const segmentFilter = segment
+      ? `AND u.segment = '${escapeStr(segment)}'`
+      : "";
+    const userTypeFilter = userType
+      ? `AND u.user_type = '${escapeStr(userType)}'`
+      : "";
+
+    const selectCases = segCases.length > 0 ? ",\n                   " + segCases.join(",\n                   ") : "";
+
+    const sql = `SELECT
+                   DATE_FORMAT(t.first_login, '%Y-%m-%d') AS fecha,
+                   COUNT(*) AS loggins_inscritos${selectCases}
+                 FROM (
+                   SELECT idmask, MIN(date) AS first_login
+                   FROM {db}.mc_logins
+                   WHERE idmask IS NOT NULL
+                     AND TRIM(idmask) <> ''
+                     AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                     AND type = 1
+                   GROUP BY idmask
+                 ) t
+                 LEFT JOIN {db}.mc_users u ON u.idmask = t.idmask
+                 WHERE 1=1 ${dateFilter} ${segmentFilter} ${userTypeFilter}
+                 GROUP BY fecha
+                 ORDER BY fecha ASC;`;
+
+    const result = await runQuery(campaign.database, sql, []);
+    const segmentMeta = campaignSegments.map((seg) => ({
+      label: seg,
+      key: toAlias(seg),
+    }));
+    res.json({ rows: result.rows || [], segments: segmentMeta });
+  } catch (error) {
+    console.error("[first-logins-by-date] Error", error);
+    res.status(500).json({
+      error: "No se pudo obtener los loggins inscritos",
+      detail: error.message,
+    });
+  }
+});
+
 router.get("/:id/redemptions-insights", async (req, res) => {
   const campaign = req.allowedCampaigns.find(
     ({ id }) => id === req.params.id
@@ -1678,8 +2032,10 @@ router.get("/:id/redemptions-insights", async (req, res) => {
   const loginType = normalizeSelectorValue(req.query.loginType);
   const userId = normalizeSelectorValue(req.query.userId);
   const userIp = normalizeSelectorValue(req.query.userIp);
+  const segment = normalizeSelectorValue(req.query.segment);
+  const userType = normalizeSelectorValue(req.query.userType);
 
-  const filters = { loginType, userId, userIp };
+  const filters = { loginType, userId, userIp, segment, userType };
 
   try {
     const amountQuery = buildRedemptionAmountDistributionQuery({ range });
@@ -2906,7 +3262,9 @@ router.get("/:id/login-security", async (req, res) => {
   const loginType = normalizeSelectorValue(req.query.loginType);
   const userId = normalizeSelectorValue(req.query.userId);
   const userIp = normalizeSelectorValue(req.query.userIp);
-  const filters = { loginType, userId, userIp };
+  const segment = normalizeSelectorValue(req.query.segment);
+  const userType = normalizeSelectorValue(req.query.userType);
+  const filters = { loginType, userId, userIp, segment, userType };
 
   try {
     const metadataNotes = [];
@@ -3638,6 +3996,23 @@ router.get("/:id", (req, res) => {
 
   const { id, name, description, database } = campaign;
   res.json({ id, name, description, database });
+});
+
+// Endpoint de administración: lista todas las bases de datos dentsu_mastercard_* disponibles en Aurora
+router.get("/admin/list-databases", async (req, res) => {
+  try {
+    const result = await runQuery(
+      "information_schema",
+      `SELECT SCHEMA_NAME FROM {db}.SCHEMATA
+       WHERE SCHEMA_NAME LIKE 'dentsu_mastercard_%'
+       ORDER BY SCHEMA_NAME;`,
+      []
+    );
+    res.json({ databases: (result.rows || []).map((r) => r.SCHEMA_NAME) });
+  } catch (error) {
+    console.error("[admin/list-databases] Error", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 module.exports = router;

@@ -36,7 +36,8 @@ const COMMON_METRICS = [
     label: "Usuarios con login",
     sql: `SELECT COUNT(DISTINCT idmask) AS value
           FROM {db}.mc_logins
-          WHERE idmask NOT IN ${EXCLUDED_IDMASKS_SQL};`,
+          WHERE idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND type IN (1, 2);`,
     dateColumn: "{db}.mc_logins.date",
     baseTable: "mc_logins",
   },
@@ -48,6 +49,7 @@ const COMMON_METRICS = [
           WHERE idmask IS NOT NULL
             AND TRIM(idmask) <> ''
             AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND block IN (1, 2)
             AND id_award IS NOT NULL
             AND id_award <> 0
             AND value IS NOT NULL
@@ -76,6 +78,7 @@ const COMMON_METRICS = [
           WHERE idmask IS NOT NULL
             AND TRIM(idmask) <> ''
             AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND block IN (1, 2)
             AND id_award IS NOT NULL
             AND id_award <> 0
             AND value IS NOT NULL
@@ -93,6 +96,7 @@ const COMMON_METRICS = [
           WHERE idmask IS NOT NULL
             AND TRIM(idmask) <> ''
             AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND block IN (1, 2)
             AND id_award IS NOT NULL
             AND id_award <> 0
             AND value IS NOT NULL
@@ -102,9 +106,49 @@ const COMMON_METRICS = [
     dateColumn: "{db}.mc_redemptions.date",
     baseTable: "mc_redemptions",
   },
+  {
+    key: "settingsMaxValue",
+    label: "Presupuesto Máximo",
+    sql: `SELECT COALESCE(CAST(value AS DECIMAL(20,2)), 0) AS value
+          FROM {db}.mc_settings
+          WHERE \`key\` = 'budget_api'
+          LIMIT 1;`,
+    baseTable: "mc_settings",
+    hidden: true,
+  },
+  {
+    key: "loginsSuccessful",
+    label: "Logins exitosos y autologins",
+    sql: `SELECT COUNT(*) AS value
+          FROM {db}.mc_logins
+          WHERE idmask IS NOT NULL
+            AND TRIM(idmask) <> ''
+            AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND type IN (1, 2);`,
+    dateColumn: "{db}.mc_logins.date",
+    baseTable: "mc_logins",
+    hidden: true,
+  },
 ];
 
 const COMMON_CHARTS = [
+  {
+    key: "firstLoginsByDate",
+    title: "Loggins Inscritos por fecha",
+    baseTable: "mc_logins",
+    sql: `SELECT DATE(t.first_login) AS fecha, COUNT(*) AS loggins_inscritos
+          FROM (
+            SELECT idmask, MIN(date) AS first_login
+            FROM {db}.mc_logins
+            WHERE idmask IS NOT NULL
+              AND TRIM(idmask) <> ''
+              AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+              AND type = 1
+            GROUP BY idmask
+          ) t
+          GROUP BY fecha
+          ORDER BY fecha ASC;`,
+  },
   {
     key: "segmentRedemptionBreakdown",
     title: "Redenciones y valor por segmento",
@@ -126,6 +170,7 @@ const COMMON_CHARTS = [
           WHERE r.idmask IS NOT NULL
             AND TRIM(r.idmask) <> ''
             AND r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+            AND r.block IN (1, 2)
             AND r.id_award IS NOT NULL
             AND r.id_award <> 0
             AND r.value IS NOT NULL
@@ -138,13 +183,22 @@ const COMMON_CHARTS = [
   },
 ];
 
+// features disponibles por campaña:
+//   cardType       → habilita filtro Tipo (Crédito / Débito)
+//   segments       → habilita filtro Segmento de Usuario
+//   firstLoginsTable → muestra tabla Loggins Inscritos con breakdown por segmento
+//
+// Para activar en una nueva campaña, agrega: features: { cardType: true, segments: true, firstLoginsTable: true }
+
 const CAMPAIGNS = [
   {
     id: "debitazo-5",
     name: "Debitazo 5",
     database: "dentsu_mastercard_debitazo_5",
+    baselineUsers: null,
     description:
       "Campaña Mastercard Debitazo 5. Indicadores de usuarios, logins y redenciones.",
+    features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
@@ -156,8 +210,10 @@ const CAMPAIGNS = [
     id: "bogota-uso-10",
     name: "Bogotá Uso 10",
     database: "dentsu_mastercard_bogota_uso_10",
+    baselineUsers: null,
     description:
       "Campaña de fidelización Bogotá Uso 10. Consultas basadas en las tablas mc_users, mc_logins y mc_redemptions.",
+    features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
@@ -169,8 +225,10 @@ const CAMPAIGNS = [
     id: "debitazo-6",
     name: "Debitazo 6",
     database: "dentsu_mastercard_debitazo_6",
+    baselineUsers: null,
     description:
       "Campaña Mastercard Debitazo 6. Indicadores de usuarios, logins y redenciones.",
+    features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, nickname, goal_amount_1, goal_trx_1, award_1
@@ -182,8 +240,10 @@ const CAMPAIGNS = [
     id: "davivienda-afluentes-3",
     name: "Davivienda Afluentes 3",
     database: "dentsu_mastercard_davivienda_afluentes_3",
+    baselineUsers: null,
     description:
       "Campaña Davivienda Afluentes. Indicadores agregados de usuarios, logins y redenciones.",
+    features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, goal_amount_1, goal_trx_1, award_1, show_davipuntos
@@ -195,8 +255,10 @@ const CAMPAIGNS = [
     id: "pacifico-sag-5",
     name: "Pacífico SAG 5",
     database: "dentsu_mastercard_pacifico_sag_5",
+    baselineUsers: null,
     description:
       "Campaña Pacífico SAG 5. Indicadores de adopción, logins y redenciones.",
+    features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, award_1, challenge_1
@@ -208,8 +270,10 @@ const CAMPAIGNS = [
     id: "pichincha",
     name: "Pichincha",
     database: "dentsu_mastercard_pichincha",
+    baselineUsers: null,
     description:
       "Campaña Banco Pichincha. Indicadores generales de usuarios, logins y redenciones.",
+    features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, award_1, challenge_1
@@ -221,8 +285,10 @@ const CAMPAIGNS = [
     id: "guayaquil-5step",
     name: "Guayaquil 5 Step",
     database: "dentsu_mastercard_guayaquil_5s_3",
+    baselineUsers: null,
     description:
       "Campaña Banco de Guayaquil 5 Step. Indicadores generales de usuarios, logins y redenciones.",
+    features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
@@ -234,8 +300,10 @@ const CAMPAIGNS = [
     id: "tuya-ola-5",
     name: "Tuya Ola 5",
     database: "dentsu_mastercard_tuya_ola_5",
+    baselineUsers: null,
     description:
       "Campaña Tuya Ola 5. Incluye indicadores generales de usuarios, logins y redenciones.",
+    features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
@@ -244,11 +312,28 @@ const CAMPAIGNS = [
                 LIMIT 50;`,
   },
   {
+    id: "tuya-ola-6",
+    name: "Tuya Ola 6",
+    database: "dentsu_mastercard_tuya_ola_6",
+    baselineUsers: null,
+    description:
+      "Campaña Tuya Ola 6. Incluye indicadores generales de usuarios, logins y redenciones.",
+    features: {},
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_amount_2, challenge_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
+  {
     id: "pacifico-5s-4",
     name: "Pacífico 5S 4",
     database: "dentsu_mastercard_pacifico_5s_4",
+    baselineUsers: null,
     description:
       "Campaña Pacífico 5S 4. Sigue las mismas métricas agregadas del resto del dashboard.",
+    features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, award_1, challenge_1
@@ -260,9 +345,76 @@ const CAMPAIGNS = [
     id: "avvillas-combo-playero",
     name: "AV Villas Combo Playero",
     database: "dentsu_mastercard_avvillas_combo_playero",
+    baselineUsers: null,
     description:
       "Campaña AV Villas Combo Playero. Panel con KPIs de usuarios, logins y redenciones.",
+    features: {},
     metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
+  {
+    id: "pongalas-a-jugar",
+    name: "Pónganlas a Jugar",
+    database: "dentsu_mastercard_pongalas_a_jugar",
+    baselineUsers: 1847829,
+    description:
+      "Campaña Pónganlas a Jugar. Indicadores de usuarios, logins y redenciones.",
+    features: {},
+    enrollmentGoals: [
+      { segment: "Débito",  userTypeValue: "debito",  target: 0.35 },
+      { segment: "Crédito", userTypeValue: "credito", target: 0.06 },
+    ],
+    metrics: [
+      ...COMMON_METRICS,
+      {
+        key: "inscribedDebito",
+        label: "Inscritos Débito",
+        sql: `SELECT COUNT(DISTINCT l.idmask) AS value
+              FROM {db}.mc_logins l
+              INNER JOIN {db}.mc_users u ON u.idmask = l.idmask
+              WHERE l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                AND l.type IN (1, 2)
+                AND u.user_type = 'debito';`,
+        baseTable: "mc_logins",
+        hidden: true,
+      },
+      {
+        key: "totalUsersDebito",
+        label: "Usuarios Totales Débito",
+        sql: `SELECT COUNT(*) AS value
+              FROM {db}.mc_users
+              WHERE (idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL})
+                AND user_type = 'debito';`,
+        baseTable: "mc_users",
+        hidden: true,
+      },
+      {
+        key: "inscribedCredito",
+        label: "Inscritos Crédito",
+        sql: `SELECT COUNT(DISTINCT l.idmask) AS value
+              FROM {db}.mc_logins l
+              INNER JOIN {db}.mc_users u ON u.idmask = l.idmask
+              WHERE l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                AND l.type IN (1, 2)
+                AND u.user_type = 'credito';`,
+        baseTable: "mc_logins",
+        hidden: true,
+      },
+      {
+        key: "totalUsersCredito",
+        label: "Usuarios Totales Crédito",
+        sql: `SELECT COUNT(*) AS value
+              FROM {db}.mc_users
+              WHERE (idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL})
+                AND user_type = 'credito';`,
+        baseTable: "mc_users",
+        hidden: true,
+      },
+    ],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
                 FROM {db}.mc_users

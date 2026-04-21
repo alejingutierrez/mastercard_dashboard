@@ -71,6 +71,8 @@ export interface SummaryFilters {
   loginType?: string;
   userId?: string;
   userIp?: string;
+  segment?: string;
+  userType?: string;
   mode?: "kpis" | "full";
 }
 
@@ -117,6 +119,70 @@ export const fetchCampaignLoginSecurity = async (
 ): Promise<LoginSecurityResponse> => {
   return cachedGet<LoginSecurityResponse>(
     `/campaigns/${campaignId}/login-security`,
+    filters as Record<string, unknown> | undefined,
+    45_000
+  );
+};
+
+export interface FirstLoginsByDateRow {
+  fecha: string;
+  loggins_inscritos: number;
+  [key: string]: string | number;
+}
+
+export interface FirstLoginsSegmentMeta {
+  label: string;
+  key: string;
+}
+
+export interface FirstLoginsByDateResponse {
+  rows: FirstLoginsByDateRow[];
+  segments: FirstLoginsSegmentMeta[];
+}
+
+export const fetchFirstLoginsByDate = async (
+  campaignId: string,
+  filters?: Pick<SummaryFilters, "from" | "to" | "segment" | "userType">
+): Promise<FirstLoginsByDateResponse> => {
+  return cachedGet<FirstLoginsByDateResponse>(
+    `/campaigns/${campaignId}/first-logins-by-date`,
+    filters as Record<string, unknown> | undefined,
+    30_000
+  );
+};
+
+export const fetchCampaignSegments = async (
+  campaignId: string
+): Promise<{ segments: string[] }> => {
+  return cachedGet<{ segments: string[] }>(
+    `/campaigns/${campaignId}/segments`,
+    undefined,
+    60_000
+  );
+};
+
+export const fetchCampaignUserTypes = async (
+  campaignId: string
+): Promise<{ userTypes: string[] }> => {
+  return cachedGet<{ userTypes: string[] }>(
+    `/campaigns/${campaignId}/user-types`,
+    undefined,
+    60_000
+  );
+};
+
+export interface EnrollmentFunnelLayer {
+  layer: string;
+  inscritos: number;
+  no_inscritos: number;
+}
+
+export const fetchEnrollmentFunnel = async (
+  campaignId: string,
+  filters?: Pick<SummaryFilters, "from" | "to">
+): Promise<{ layers: EnrollmentFunnelLayer[] }> => {
+  return cachedGet<{ layers: EnrollmentFunnelLayer[] }>(
+    `/campaigns/${campaignId}/enrollment-funnel`,
     filters as Record<string, unknown> | undefined,
     45_000
   );

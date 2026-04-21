@@ -21,6 +21,7 @@ import {
   Spin,
   Statistic,
   Switch,
+  Table,
   Tag,
   Tooltip,
   Typography,
@@ -45,7 +46,9 @@ import dayjs, { type Dayjs } from "dayjs";
 import type {
   ActivityResponse,
   Campaign,
+  CampaignFeatures,
   CampaignSummaryResponse,
+  EnrollmentGoal,
   LoginSecurityResponse,
   RedemptionInsightsResponse,
   DashboardUser,
@@ -56,7 +59,14 @@ import {
   fetchCampaignActivity,
   fetchCampaignRedemptionInsights,
   fetchCampaignLoginSecurity,
+  fetchFirstLoginsByDate,
+  fetchCampaignSegments,
+  fetchCampaignUserTypes,
+  fetchEnrollmentFunnel,
   type SummaryFilters,
+  type FirstLoginsByDateRow,
+  type FirstLoginsSegmentMeta,
+  type EnrollmentFunnelLayer,
 } from "../api/campaigns";
 import { updateCurrentUserProfile } from "../api/auth";
 import { fetchUsers, createUser, updateUser, deleteUser } from "../api/users";
@@ -143,7 +153,7 @@ const generateTemporaryPassword = (length = 12) => {
   return result;
 };
 
-type KpiFormat = "number" | "currency";
+type KpiFormat = "number" | "currency" | "decimal";
 
 interface KpiDefinition {
   key: string;
@@ -155,32 +165,31 @@ interface KpiDefinition {
 const KPI_DEFINITIONS: KpiDefinition[] = [
   {
     key: "totalUsers",
-    label: "Usuarios totales",
+    label: "Usuarios Totales En Base",
     help: "Usuarios únicos disponibles en el universo de la campaña (no necesariamente con actividad).",
   },
   {
     key: "totalLogins",
     label: "Logins totales",
+    format: "number",
     help: "Total de eventos de login registrados para los filtros seleccionados.",
   },
   {
     key: "usersWithLogin",
-    label: "Usuarios con login",
+    label: "Usuarios Inscritos",
+    format: "number",
     help: "Usuarios únicos que realizaron al menos un login.",
-  },
-  {
-    key: "redemptionAttempts",
-    label: "Intentos de redención",
-    help: "Total de intentos de redención (incluye intentos fallidos y sin idmask).",
   },
   {
     key: "totalRedemptions",
     label: "Redenciones válidas",
+    format: "number",
     help: "Redenciones aprobadas o exitosas (excluye intentos fallidos).",
   },
   {
     key: "totalWinners",
-    label: "Ganadores totales",
+    label: "Ganadores Redimidos",
+    format: "number",
     help: "Usuarios únicos con al menos una redención válida.",
   },
   {
@@ -188,6 +197,18 @@ const KPI_DEFINITIONS: KpiDefinition[] = [
     label: "Valor acumulado en redenciones",
     format: "currency",
     help: "Suma del valor (COP) redimido en redenciones válidas.",
+  },
+  {
+    key: "valorDisponible",
+    label: "Valor Disponible en Redenciones",
+    format: "currency",
+    help: "Presupuesto máximo (mc_settings) menos el valor ya redimido.",
+  },
+  {
+    key: "loginPromedio",
+    label: "Login Promedio Por Usuario",
+    format: "decimal",
+    help: "Logins exitosos y autologins dividido entre usuarios inscritos.",
   },
 ];
 
@@ -209,6 +230,10 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<string>();
   const [loginType, setLoginType] = useState<string>();
+  const [userTypeFilter, setUserTypeFilter] = useState<string>();
+  const [segmentoFilter, setSegmentoFilter] = useState<string>();
+  const [userTypeOptions, setUserTypeOptions] = useState<string[]>([]);
+  const [segmentOptions, setSegmentOptions] = useState<string[]>([]);
   const [userIdFilter, setUserIdFilter] = useState<string>();
   const [userIpFilter, setUserIpFilter] = useState<string>();
   const [userIdInput, setUserIdInput] = useState("");
@@ -220,6 +245,11 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   const [activity, setActivity] = useState<ActivityResponse | null>(null);
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [activityError, setActivityError] = useState<string>();
+  const [firstLogins, setFirstLogins] = useState<FirstLoginsByDateRow[]>([]);
+  const [firstLoginsSegments, setFirstLoginsSegments] = useState<FirstLoginsSegmentMeta[]>([]);
+  const [loadingFirstLogins, setLoadingFirstLogins] = useState(false);
+  const [enrollmentFunnel, setEnrollmentFunnel] = useState<EnrollmentFunnelLayer[]>([]);
+  const [loadingEnrollmentFunnel, setLoadingEnrollmentFunnel] = useState(false);
   const [redemptionInsights, setRedemptionInsights] =
     useState<RedemptionInsightsResponse | null>(null);
   const [loadingRedemptionInsights, setLoadingRedemptionInsights] =
@@ -683,6 +713,12 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     if (loginType) {
       filters.loginType = loginType;
     }
+    if (userTypeFilter) {
+      filters.userType = userTypeFilter;
+    }
+    if (segmentoFilter) {
+      filters.segment = segmentoFilter;
+    }
     if (userIdFilter) {
       filters.userId = userIdFilter;
     }
@@ -690,7 +726,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       filters.userIp = userIpFilter;
     }
     return filters;
-  }, [dateRange, loginType, userIdFilter, userIpFilter]);
+  }, [dateRange, loginType, userTypeFilter, segmentoFilter, userIdFilter, userIpFilter]);
 
   const filtersAreActive = Boolean(
     (defaultCampaignId
@@ -698,6 +734,8 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       : selectedCampaign) ||
       dateRange ||
       loginType ||
+      userTypeFilter ||
+      segmentoFilter ||
       userIdFilter ||
       userIpFilter,
   );
@@ -727,6 +765,24 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     return campaignNameMap.get(selectedCampaign) ?? selectedCampaign;
   }, [campaignNameMap, selectedCampaign]);
 
+  const selectedCampaignFeatures = useMemo<CampaignFeatures>(() => {
+    if (!selectedCampaign) return {};
+    return campaigns.find((c) => c.id === selectedCampaign)?.features ?? {};
+  }, [campaigns, selectedCampaign]);
+
+  const selectedCampaignBaselineUsers = useMemo<number | null>(() => {
+    if (!selectedCampaign) return null;
+    return campaigns.find((c) => c.id === selectedCampaign)?.baselineUsers ?? null;
+  }, [campaigns, selectedCampaign]);
+
+  const selectedCampaignEnrollmentGoals = useMemo<EnrollmentGoal[] | null>(
+    () => {
+      if (!selectedCampaign) return null;
+      return campaigns.find((c) => c.id === selectedCampaign)?.enrollmentGoals ?? null;
+    },
+    [campaigns, selectedCampaign],
+  );
+
   const dateRangeLabel = useMemo(() => {
     if (!dateRange) {
       return "Todo el periodo";
@@ -740,6 +796,26 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     () => currentUser.allowedCampaignIds?.join("|") || "",
     [currentUser.allowedCampaignIds]
   );
+
+  // Load dynamic filter options when campaign changes
+  useEffect(() => {
+    if (!selectedCampaign || selectedCampaign === "all") {
+      setSegmentOptions([]);
+      setUserTypeOptions([]);
+      setSegmentoFilter(undefined);
+      setUserTypeFilter(undefined);
+      return;
+    }
+    fetchCampaignSegments(selectedCampaign)
+      .then((r) => setSegmentOptions(r.segments))
+      .catch(() => setSegmentOptions([]));
+    fetchCampaignUserTypes(selectedCampaign)
+      .then((r) => setUserTypeOptions(r.userTypes))
+      .catch(() => setUserTypeOptions([]));
+    // Reset filters when campaign changes (values may differ)
+    setSegmentoFilter(undefined);
+    setUserTypeFilter(undefined);
+  }, [selectedCampaign]);
 
   useEffect(() => {
     const loadCampaigns = async () => {
@@ -888,6 +964,76 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     selectedMenu,
     sharedQueryFilters,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFirstLogins = async () => {
+      if (selectedMenu !== "overview" || !selectedCampaign || selectedCampaign === "all") {
+        if (!cancelled) setFirstLogins([]);
+        return;
+      }
+      try {
+        setLoadingFirstLogins(true);
+        const filters: Pick<SummaryFilters, "from" | "to" | "segment" | "userType"> = {};
+        if (sharedQueryFilters.from && sharedQueryFilters.to) {
+          filters.from = sharedQueryFilters.from;
+          filters.to = sharedQueryFilters.to;
+        }
+        if (sharedQueryFilters.segment) {
+          filters.segment = sharedQueryFilters.segment;
+        }
+        if (sharedQueryFilters.userType) {
+          filters.userType = sharedQueryFilters.userType;
+        }
+        const data = await fetchFirstLoginsByDate(selectedCampaign, filters);
+        if (!cancelled) {
+          setFirstLogins(data.rows || []);
+          setFirstLoginsSegments(data.segments || []);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setFirstLogins([]);
+          setFirstLoginsSegments([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingFirstLogins(false);
+      }
+    };
+
+    loadFirstLogins();
+    return () => { cancelled = true; };
+  }, [selectedCampaign, selectedMenu, sharedQueryFilters]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadEnrollmentFunnel = async () => {
+      if (selectedMenu !== "redemptions" || !selectedCampaign || selectedCampaign === "all") {
+        if (!cancelled) setEnrollmentFunnel([]);
+        return;
+      }
+      try {
+        setLoadingEnrollmentFunnel(true);
+        const filters: Pick<SummaryFilters, "from" | "to"> = {};
+        if (sharedQueryFilters.from && sharedQueryFilters.to) {
+          filters.from = sharedQueryFilters.from;
+          filters.to = sharedQueryFilters.to;
+        }
+        const data = await fetchEnrollmentFunnel(selectedCampaign, filters);
+        if (!cancelled) setEnrollmentFunnel(data.layers || []);
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) setEnrollmentFunnel([]);
+      } finally {
+        if (!cancelled) setLoadingEnrollmentFunnel(false);
+      }
+    };
+
+    loadEnrollmentFunnel();
+    return () => { cancelled = true; };
+  }, [selectedCampaign, selectedMenu, sharedQueryFilters]);
 
   useEffect(() => {
     if (!selectedCampaign || selectedCampaign === "all") {
@@ -1089,6 +1235,22 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       });
     }
 
+    if (userTypeFilter) {
+      tags.push({
+        key: "userType",
+        label: `Tipo: ${userTypeFilter}`,
+        onClose: () => setUserTypeFilter(undefined),
+      });
+    }
+
+    if (segmentoFilter) {
+      tags.push({
+        key: "segmento",
+        label: `Segmento: ${segmentoFilter}`,
+        onClose: () => setSegmentoFilter(undefined),
+      });
+    }
+
     if (userIdFilter) {
       tags.push({
         key: "userId",
@@ -1117,6 +1279,8 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     dateRangeLabel,
     loginType,
     loginTypeLabelMap,
+    userTypeFilter,
+    segmentoFilter,
     userIdFilter,
     userIpFilter,
   ]);
@@ -1519,6 +1683,8 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     setSelectedCampaign(defaultCampaignId);
     setDateRange(null);
     setLoginType(undefined);
+    setUserTypeFilter(undefined);
+    setSegmentoFilter(undefined);
     setUserIdFilter(undefined);
     setUserIpFilter(undefined);
     setUserIdInput("");
@@ -1569,6 +1735,8 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
             heatmapData={redemptionHeatmapData}
             tableColumns={redemptionTableColumns}
             tableData={redemptionTableData}
+            enrollmentFunnel={enrollmentFunnel}
+            loadingEnrollmentFunnel={loadingEnrollmentFunnel}
           />
         );
       case "login-security":
@@ -1865,6 +2033,41 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                   </Row>
 
                   <Row gutter={[12, 12]} align="middle" style={{ marginTop: 4 }}>
+                    <Col xs={24} md={12} lg={6}>
+                      <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                        <Text type="secondary" className="filter-label">
+                          Tipo de usuario
+                        </Text>
+                        <Select
+                          allowClear
+                          placeholder="Todos los tipos"
+                          style={{ width: "100%" }}
+                          value={userTypeFilter ?? undefined}
+                          options={userTypeOptions.map((v) => ({ value: v, label: v }))}
+                          onChange={(value) => setUserTypeFilter(value ?? undefined)}
+                          notFoundContent="Sin opciones para esta campaña"
+                        />
+                      </Space>
+                    </Col>
+                    <Col xs={24} md={12} lg={18}>
+                      <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                        <Text type="secondary" className="filter-label">
+                          Segmento de Usuario
+                        </Text>
+                        <Select
+                          allowClear
+                          placeholder="Todos los segmentos"
+                          style={{ width: "100%" }}
+                          value={segmentoFilter ?? undefined}
+                          options={segmentOptions.map((v) => ({ value: v, label: v }))}
+                          onChange={(value) => setSegmentoFilter(value ?? undefined)}
+                          notFoundContent="Sin opciones para esta campaña"
+                        />
+                      </Space>
+                    </Col>
+                  </Row>
+
+                  <Row gutter={[12, 12]} align="middle" style={{ marginTop: 4 }}>
                     <Col xs={24} md={12}>
                       <Space
                         direction="vertical"
@@ -1954,9 +2157,31 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                         </div>
                         <Row gutter={[16, 16]} className="kpi-grid">
                           {KPI_DEFINITIONS.map((definition, index) => {
-                            const metricValue = metricsByKey.get(
-                              definition.key,
-                            )?.value;
+                            // Skip valorDisponible if settingsMaxValue is null
+                            if (definition.key === "valorDisponible") {
+                              const maxVal = metricsByKey.get("settingsMaxValue")?.value ?? null;
+                              if (maxVal === null) return null;
+                            }
+
+                            let metricValue: number | null;
+                            if (definition.key === "valorDisponible") {
+                              const maxVal = metricsByKey.get("settingsMaxValue")?.value ?? null;
+                              const redeemed = metricsByKey.get("totalRedeemedValue")?.value ?? null;
+                              metricValue =
+                                maxVal !== null && redeemed !== null
+                                  ? (maxVal as number) - (redeemed as number)
+                                  : null;
+                            } else if (definition.key === "loginPromedio") {
+                              const logins = metricsByKey.get("loginsSuccessful")?.value ?? null;
+                              const users = metricsByKey.get("usersWithLogin")?.value ?? null;
+                              metricValue =
+                                logins !== null && users !== null && (users as number) > 0
+                                  ? (logins as number) / (users as number)
+                                  : null;
+                            } else {
+                              metricValue = metricsByKey.get(definition.key)?.value ?? null;
+                            }
+
                             const titleNode = (
                               <span className="kpi-card__title">
                                 {definition.label}
@@ -1967,6 +2192,116 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                                 )}
                               </span>
                             );
+
+                            // Special render for usersWithLogin: show % of base + per-segment goals
+                            if (definition.key === "usersWithLogin") {
+                              const inscribed = metricValue;
+                              const base = metricsByKey.get("totalUsers")?.value ?? null;
+                              const globalPct =
+                                inscribed !== null && base !== null && (base as number) > 0
+                                  ? ((inscribed as number) / (base as number)) * 100
+                                  : null;
+
+                              const goals = selectedCampaignEnrollmentGoals;
+                              const cap = (s: string) =>
+                                s.charAt(0).toUpperCase() + s.slice(1);
+                              const segmentRows =
+                                goals && goals.length > 0
+                                  ? goals.map((goal) => {
+                                      const segInscribed =
+                                        metricsByKey.get(`inscribed${cap(goal.userTypeValue)}`)?.value ?? null;
+                                      const segTotal =
+                                        metricsByKey.get(`totalUsers${cap(goal.userTypeValue)}`)?.value ?? null;
+                                      const segPct =
+                                        segInscribed !== null &&
+                                        segTotal !== null &&
+                                        (segTotal as number) > 0
+                                          ? ((segInscribed as number) / (segTotal as number)) * 100
+                                          : null;
+                                      const achieved =
+                                        segPct !== null ? segPct >= goal.target * 100 : null;
+                                      return { goal, segPct, achieved };
+                                    })
+                                  : [];
+
+                              return (
+                                <Col key={definition.key} xs={24} sm={12} lg={8} xl={6} className="kpi-col">
+                                  <Card className={`kpi-card kpi-card--accent-${index % 3}`}>
+                                    <Statistic
+                                      title={titleNode}
+                                      value={inscribed ?? 0}
+                                      formatter={() => (
+                                        <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                                          <span>{formatValue(inscribed, "number")}</span>
+                                          {globalPct !== null && (
+                                            <Tag color="blue" style={{ marginLeft: 4 }}>
+                                              {globalPct.toFixed(1)}% de base
+                                            </Tag>
+                                          )}
+                                        </span>
+                                      )}
+                                    />
+                                    {segmentRows.length > 0 && (
+                                      <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                        {segmentRows.map(({ goal, segPct, achieved }) => (
+                                          <Tag
+                                            key={goal.userTypeValue}
+                                            color={
+                                              achieved === null
+                                                ? "default"
+                                                : achieved
+                                                ? "success"
+                                                : "error"
+                                            }
+                                            style={{ fontSize: 11 }}
+                                          >
+                                            {goal.segment}:{" "}
+                                            {segPct !== null ? `${segPct.toFixed(1)}%` : "—"}
+                                            {" / meta "}
+                                            {(goal.target * 100).toFixed(0)}%
+                                          </Tag>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </Card>
+                                </Col>
+                              );
+                            }
+
+                            // Special render for totalUsers: show baseline + % change
+                            if (definition.key === "totalUsers" && selectedCampaignBaselineUsers !== null) {
+                              const current = metricValue;
+                              const baseline = selectedCampaignBaselineUsers;
+                              const pct =
+                                current !== null && baseline > 0
+                                  ? ((current - baseline) / baseline) * 100
+                                  : null;
+                              return (
+                                <Col key={definition.key} xs={24} sm={12} lg={8} xl={6} className="kpi-col">
+                                  <Card className={`kpi-card kpi-card--accent-${index % 3}`}>
+                                    <Statistic
+                                      title={titleNode}
+                                      value={current ?? 0}
+                                      formatter={() => (
+                                        <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                                          <span>{formatValue(current, "number")}</span>
+                                          {pct !== null && (
+                                            <Tag color={pct >= 0 ? "success" : "error"} style={{ marginLeft: 4 }}>
+                                              {pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
+                                            </Tag>
+                                          )}
+                                        </span>
+                                      )}
+                                    />
+                                    <div style={{ marginTop: 4 }}>
+                                      <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Base inicial: {new Intl.NumberFormat("es-CO").format(baseline)}
+                                      </Text>
+                                    </div>
+                                  </Card>
+                                </Col>
+                              );
+                            }
 
                             return (
                               <Col
@@ -2006,6 +2341,46 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                 )}
 
                 {mainSection}
+
+                {selectedMenu === "overview" && selectedCampaign && selectedCampaign !== "all" && (
+                  <Spin spinning={loadingFirstLogins}>
+                    <Card title="Loggins Inscritos por fecha" style={{ marginTop: 16 }}>
+                      <Table
+                        dataSource={firstLogins.map((row, i) => ({ ...row, key: i }))}
+                        pagination={{ pageSize: 10, showSizeChanger: false }}
+                        size="small"
+                        scroll={{ x: "max-content" }}
+                        locale={{ emptyText: "Sin datos para el período seleccionado" }}
+                        columns={[
+                          {
+                            title: "Fecha",
+                            dataIndex: "fecha",
+                            key: "fecha",
+                            fixed: "left" as const,
+                            sorter: (a: FirstLoginsByDateRow, b: FirstLoginsByDateRow) =>
+                              String(a.fecha).localeCompare(String(b.fecha)),
+                          },
+                          {
+                            title: "Total",
+                            dataIndex: "loggins_inscritos",
+                            key: "loggins_inscritos",
+                            align: "right" as const,
+                            sorter: (a: FirstLoginsByDateRow, b: FirstLoginsByDateRow) =>
+                              (a.loggins_inscritos as number) - (b.loggins_inscritos as number),
+                          },
+                          ...firstLoginsSegments.map((seg) => ({
+                            title: seg.label,
+                            dataIndex: seg.key,
+                            key: seg.key,
+                            align: "right" as const,
+                            sorter: (a: FirstLoginsByDateRow, b: FirstLoginsByDateRow) =>
+                              ((a[seg.key] as number) || 0) - ((b[seg.key] as number) || 0),
+                          })),
+                        ]}
+                      />
+                    </Card>
+                  </Spin>
+                )}
               </div>
             </div>
           </div>

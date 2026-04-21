@@ -152,10 +152,11 @@ export interface RedemptionTableRow {
 }
 
 export const formatValue = (
-  value: number | null | undefined,
-  format: "number" | "currency" = "number",
+  value: number | string | null | undefined,
+  format: "number" | "currency" | "decimal" = "number",
 ): string => {
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  const num = typeof value === "string" ? Number(value) : value;
+  if (typeof num !== "number" || Number.isNaN(num)) {
     return "N/D";
   }
 
@@ -164,17 +165,22 @@ export const formatValue = (
       style: "currency",
       currency: "COP",
       maximumFractionDigits: 0,
-    }).format(value);
+    }).format(num);
   }
 
-  return new Intl.NumberFormat("es-ES").format(value);
+  if (format === "decimal") {
+    return new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(num);
+  }
+
+  return new Intl.NumberFormat("es-CO").format(num);
 };
 
-export const formatNumber = (value: number | null | undefined): string => {
-  if (typeof value !== "number" || Number.isNaN(value)) {
+export const formatNumber = (value: number | string | null | undefined): string => {
+  const num = typeof value === "string" ? Number(value) : value;
+  if (typeof num !== "number" || Number.isNaN(num)) {
     return "N/D";
   }
-  return new Intl.NumberFormat("es-ES").format(value);
+  return new Intl.NumberFormat("es-CO").format(num);
 };
 
 export const formatPercentage = (
@@ -256,7 +262,19 @@ export const buildMetricsByKey = (
   summary: CampaignSummaryResponse | null,
 ): Map<string, Metric> => {
   const entries = new Map<string, Metric>();
-  (summary?.metrics ?? []).forEach((metric) => entries.set(metric.key, metric));
+  (summary?.metrics ?? []).forEach((metric) => {
+    // Lambda puede devolver valores numéricos como strings; coercionar aquí
+    const raw = metric.value;
+    const coerced: number | null =
+      raw === null || raw === undefined
+        ? null
+        : typeof raw === "number"
+          ? raw
+          : Number.isNaN(Number(raw))
+            ? null
+            : Number(raw);
+    entries.set(metric.key, { ...metric, value: coerced });
+  });
   return entries;
 };
 

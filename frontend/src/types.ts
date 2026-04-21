@@ -1,8 +1,23 @@
+export interface CampaignFeatures {
+  cardType?: boolean;       // habilita filtro Tipo (Crédito / Débito)
+  segments?: boolean;       // habilita filtro Segmento de Usuario
+  firstLoginsTable?: boolean; // muestra tabla Loggins Inscritos con breakdown por segmento
+}
+
+export interface EnrollmentGoal {
+  segment: string;       // nombre legible para la UI (ej: "Débito")
+  userTypeValue: string; // valor exacto en mc_users.user_type (ej: "debito")
+  target: number;        // meta como decimal (0.35 = 35%)
+}
+
 export interface Campaign {
   id: string;
   name: string;
   description: string;
   database?: string;
+  features?: CampaignFeatures;
+  baselineUsers?: number | null;
+  enrollmentGoals?: EnrollmentGoal[] | null;
 }
 
 export interface Metric {
