@@ -77,9 +77,12 @@ jobs:
       - name: Build and push backend image
         run: |
           IMAGE_URI=${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}:${{ steps.image.outputs.tag }}
+          CACHE_URI=${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}:cache
           docker buildx build \
             --platform linux/arm64 \
             --tag "$IMAGE_URI" \
+            --cache-from "type=registry,ref=${CACHE_URI}" \
+            --cache-to   "type=registry,ref=${CACHE_URI},mode=max" \
             --push \
             backend
           echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
