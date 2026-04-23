@@ -365,8 +365,8 @@ const CAMPAIGNS = [
       "Campaña Pónganlas a Jugar. Indicadores de usuarios, logins y redenciones.",
     features: {},
     enrollmentGoals: [
-      { segment: "Débito",  userTypeValue: "debito",  target: 0.35 },
-      { segment: "Crédito", userTypeValue: "credito", target: 0.06 },
+      { segment: "Débito",  userTypeValue: "debito",  target: 79922 },
+      { segment: "Crédito", userTypeValue: "credito", target: 9135 },
     ],
     metrics: [
       ...COMMON_METRICS,
@@ -383,16 +383,6 @@ const CAMPAIGNS = [
         hidden: true,
       },
       {
-        key: "totalUsersDebito",
-        label: "Usuarios Totales Débito",
-        sql: `SELECT COUNT(*) AS value
-              FROM {db}.mc_users
-              WHERE (idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL})
-                AND user_type = 'debito';`,
-        baseTable: "mc_users",
-        hidden: true,
-      },
-      {
         key: "inscribedCredito",
         label: "Inscritos Crédito",
         sql: `SELECT COUNT(DISTINCT l.idmask) AS value
@@ -402,16 +392,6 @@ const CAMPAIGNS = [
                 AND l.type IN (1, 2)
                 AND u.user_type = 'credito';`,
         baseTable: "mc_logins",
-        hidden: true,
-      },
-      {
-        key: "totalUsersCredito",
-        label: "Usuarios Totales Crédito",
-        sql: `SELECT COUNT(*) AS value
-              FROM {db}.mc_users
-              WHERE (idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL})
-                AND user_type = 'credito';`,
-        baseTable: "mc_users",
         hidden: true,
       },
     ],

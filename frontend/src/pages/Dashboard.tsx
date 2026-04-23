@@ -96,6 +96,7 @@ import {
   createLoginSecurityDetailColumns,
   createRedemptionTableColumns,
   createUserColumns,
+  formatNumber,
   formatValue,
 } from "./dashboard/dataTransforms";
 import { exportExcel } from "../utils/exportExcel";
@@ -2210,17 +2211,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                                   ? goals.map((goal) => {
                                       const segInscribed =
                                         metricsByKey.get(`inscribed${cap(goal.userTypeValue)}`)?.value ?? null;
-                                      const segTotal =
-                                        metricsByKey.get(`totalUsers${cap(goal.userTypeValue)}`)?.value ?? null;
-                                      const segPct =
-                                        segInscribed !== null &&
-                                        segTotal !== null &&
-                                        (segTotal as number) > 0
-                                          ? ((segInscribed as number) / (segTotal as number)) * 100
-                                          : null;
-                                      const achieved =
-                                        segPct !== null ? segPct >= goal.target * 100 : null;
-                                      return { goal, segPct, achieved };
+                                      return { goal, segInscribed };
                                     })
                                   : [];
 
@@ -2243,24 +2234,22 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                                     />
                                     {segmentRows.length > 0 && (
                                       <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                        {segmentRows.map(({ goal, segPct, achieved }) => (
-                                          <Tag
-                                            key={goal.userTypeValue}
-                                            color={
-                                              achieved === null
-                                                ? "default"
-                                                : achieved
-                                                ? "success"
-                                                : "error"
-                                            }
-                                            style={{ fontSize: 11 }}
-                                          >
-                                            {goal.segment}:{" "}
-                                            {segPct !== null ? `${segPct.toFixed(1)}%` : "—"}
-                                            {" / meta "}
-                                            {(goal.target * 100).toFixed(0)}%
-                                          </Tag>
-                                        ))}
+                                        {segmentRows.map(({ goal, segInscribed }) => {
+                                          const pct =
+                                            segInscribed !== null && goal.target > 0
+                                              ? ((segInscribed as number) / goal.target) * 100
+                                              : null;
+                                          return (
+                                            <Tag
+                                              key={goal.userTypeValue}
+                                              color="blue"
+                                              style={{ fontSize: 11 }}
+                                            >
+                                              {goal.segment}:{" "}
+                                              {pct !== null ? `${pct.toFixed(1)}%` : "—"}
+                                            </Tag>
+                                          );
+                                        })}
                                       </div>
                                     )}
                                   </Card>
@@ -2285,7 +2274,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                                       formatter={() => (
                                         <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                                           <span>{formatValue(current, "number")}</span>
-                                          {pct !== null && (
+                                          {pct !== null && !userTypeFilter && !segmentoFilter && (
                                             <Tag color={pct >= 0 ? "success" : "error"} style={{ marginLeft: 4 }}>
                                               {pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
                                             </Tag>

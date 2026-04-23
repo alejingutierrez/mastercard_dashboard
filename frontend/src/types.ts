@@ -7,7 +7,7 @@ export interface CampaignFeatures {
 export interface EnrollmentGoal {
   segment: string;       // nombre legible para la UI (ej: "Débito")
   userTypeValue: string; // valor exacto en mc_users.user_type (ej: "debito")
-  target: number;        // meta como decimal (0.35 = 35%)
+  target: number;        // meta como número absoluto de usuarios inscritos (ej: 9135)
 }
 
 export interface Campaign {
