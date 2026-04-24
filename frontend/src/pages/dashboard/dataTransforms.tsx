@@ -448,7 +448,7 @@ export const buildLoginHeatmapData = (
   const dayHeaders: LoginHeatmapHeader[] = Array.from(daySet)
     .sort((a, b) => a - b)
     .map((day) => {
-      const baseDate = dayjs().day(day);
+      const baseDate = dayjs().day(day - 1);
       const labels = {
         label: baseDate.format("dd"),
         tooltip: baseDate.format("dddd"),

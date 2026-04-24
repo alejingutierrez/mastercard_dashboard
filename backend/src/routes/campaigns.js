@@ -1992,7 +1992,7 @@ router.get("/:id/first-logins-by-date", async (req, res) => {
                    WHERE idmask IS NOT NULL
                      AND TRIM(idmask) <> ''
                      AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
-                     AND type = 1
+                     AND type IN (1, 2)
                    GROUP BY idmask
                  ) t
                  LEFT JOIN {db}.mc_users u ON u.idmask = t.idmask
@@ -2012,6 +2012,55 @@ router.get("/:id/first-logins-by-date", async (req, res) => {
       error: "No se pudo obtener los loggins inscritos",
       detail: error.message,
     });
+  }
+});
+
+router.get("/:id/enrolled-users", async (req, res) => {
+  const campaign = req.allowedCampaigns.find(({ id }) => id === req.params.id);
+  if (!campaign) {
+    const isKnownCampaign = Boolean(getCampaignById(req.params.id));
+    return res.status(isKnownCampaign ? 403 : 404).json({
+      error: isKnownCampaign ? "No tienes acceso a esta campaña." : "Campaña no encontrada",
+    });
+  }
+
+  const range = parseDateRange(req.query);
+  const segment = normalizeSelectorValue(req.query.segment);
+  const userType = normalizeSelectorValue(req.query.userType);
+
+  try {
+    const escapeStr = (s) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const dateFilter = range
+      ? `AND t.first_login BETWEEN '${range.from}' AND '${range.to} 23:59:59'`
+      : "";
+    const segmentFilter = segment ? `AND u.segment = '${escapeStr(segment)}'` : "";
+    const userTypeFilter = userType ? `AND u.user_type = '${escapeStr(userType)}'` : "";
+
+    const sql = `
+      SELECT
+        t.idmask,
+        DATE_FORMAT(t.first_login, '%Y-%m-%d') AS fecha_inscripcion,
+        COALESCE(u.segment, '') AS segmento,
+        COALESCE(u.user_type, '') AS tipo_usuario
+      FROM (
+        SELECT idmask, MIN(date) AS first_login
+        FROM {db}.mc_logins
+        WHERE idmask IS NOT NULL
+          AND TRIM(idmask) <> ''
+          AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+          AND type IN (1, 2)
+        GROUP BY idmask
+      ) t
+      LEFT JOIN {db}.mc_users u ON u.idmask = t.idmask
+      WHERE 1=1 ${dateFilter} ${segmentFilter} ${userTypeFilter}
+      ORDER BY t.first_login ASC, t.idmask ASC;
+    `;
+
+    const result = await runQuery(campaign.database, sql, []);
+    res.json({ rows: result.rows || [] });
+  } catch (error) {
+    console.error("[enrolled-users] Error", error);
+    res.status(500).json({ error: "No se pudo obtener los usuarios inscritos.", detail: error.message });
   }
 });
 

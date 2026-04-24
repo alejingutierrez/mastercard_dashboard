@@ -151,6 +151,17 @@ export const fetchFirstLoginsByDate = async (
   );
 };
 
+export const fetchEnrolledUsers = async (
+  campaignId: string,
+  filters?: Pick<SummaryFilters, "from" | "to" | "segment" | "userType">
+): Promise<{ rows: { idmask: string; fecha_inscripcion: string; segmento: string; tipo_usuario: string }[] }> => {
+  return cachedGet(
+    `/campaigns/${campaignId}/enrolled-users`,
+    filters as Record<string, unknown> | undefined,
+    0 // sin caché — siempre fresco al exportar
+  );
+};
+
 export const fetchCampaignSegments = async (
   campaignId: string
 ): Promise<{ segments: string[] }> => {

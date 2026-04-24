@@ -60,6 +60,7 @@ import {
   fetchCampaignRedemptionInsights,
   fetchCampaignLoginSecurity,
   fetchFirstLoginsByDate,
+  fetchEnrolledUsers,
   fetchCampaignSegments,
   fetchCampaignUserTypes,
   fetchEnrollmentFunnel,
@@ -1564,6 +1565,22 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
             name: "Hitos",
             data: activity.annotations as unknown as Record<string, unknown>[],
           });
+        }
+        if (selectedCampaign && selectedCampaign !== "all") {
+          const enrolledFilters: Parameters<typeof fetchEnrolledUsers>[1] = {};
+          if (sharedQueryFilters.from && sharedQueryFilters.to) {
+            enrolledFilters.from = sharedQueryFilters.from;
+            enrolledFilters.to = sharedQueryFilters.to;
+          }
+          if (sharedQueryFilters.segment) enrolledFilters.segment = sharedQueryFilters.segment;
+          if (sharedQueryFilters.userType) enrolledFilters.userType = sharedQueryFilters.userType;
+          const enrolledData = await fetchEnrolledUsers(selectedCampaign, enrolledFilters);
+          if (enrolledData.rows.length) {
+            sheets.push({
+              name: "Usuarios Inscritos",
+              data: enrolledData.rows as unknown as Record<string, unknown>[],
+            });
+          }
         }
       } else if (selectedMenu === "redemptions") {
         if (redemptionInsights?.amountDistribution?.length) {
