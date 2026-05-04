@@ -204,7 +204,7 @@ const KPI_DEFINITIONS: KpiDefinition[] = [
     key: "valorDisponible",
     label: "Valor Disponible en Redenciones",
     format: "currency",
-    help: "Presupuesto máximo (mc_settings) menos el valor ya redimido.",
+    help: "Presupuesto máximo (mc_settings) menos el valor acumulado en redenciones. Al filtrar por tipo de usuario, refleja el valor acumulado para ese segmento.",
   },
   {
     key: "loginPromedio",
@@ -2183,8 +2183,15 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
 
                             let metricValue: number | null;
                             if (definition.key === "valorDisponible") {
-                              const maxVal = metricsByKey.get("settingsMaxValue")?.value ?? null;
-                              const redeemed = metricsByKey.get("totalRedeemedValue")?.value ?? null;
+                              const cap = userTypeFilter
+                                ? userTypeFilter.charAt(0).toUpperCase() + userTypeFilter.slice(1)
+                                : null;
+                              const maxVal = cap && metricsByKey.has(`settingsMaxValue${cap}`)
+                                ? (metricsByKey.get(`settingsMaxValue${cap}`)?.value ?? null)
+                                : (metricsByKey.get("settingsMaxValue")?.value ?? null);
+                              const redeemed = cap && metricsByKey.has(`redeemedValue${cap}`)
+                                ? (metricsByKey.get(`redeemedValue${cap}`)?.value ?? null)
+                                : (metricsByKey.get("totalRedeemedValue")?.value ?? null);
                               metricValue =
                                 maxVal !== null && redeemed !== null
                                   ? (maxVal as number) - (redeemed as number)

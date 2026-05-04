@@ -394,6 +394,40 @@ const CAMPAIGNS = [
         baseTable: "mc_logins",
         hidden: true,
       },
+      {
+        key: "redeemedValueDebito",
+        label: "Valor acumulado débito",
+        sql: `SELECT COALESCE(SUM(value), 0) AS value
+              FROM {db}.mc_redemptions
+              WHERE idmask IN (SELECT idmask FROM {db}.mc_users WHERE user_type = 'debito');`,
+        baseTable: "mc_redemptions",
+        hidden: true,
+      },
+      {
+        key: "redeemedValueCredito",
+        label: "Valor acumulado crédito",
+        sql: `SELECT COALESCE(SUM(value), 0) AS value
+              FROM {db}.mc_redemptions
+              WHERE idmask IN (SELECT idmask FROM {db}.mc_users WHERE user_type = 'credito');`,
+        baseTable: "mc_redemptions",
+        hidden: true,
+      },
+      {
+        key: "settingsMaxValueDebito",
+        label: "Presupuesto débito",
+        sql: `SELECT COALESCE(CAST(value AS DECIMAL(20,2)), 0) AS value
+              FROM {db}.mc_settings WHERE \`key\` = 'budget_api_debito' LIMIT 1;`,
+        baseTable: "mc_settings",
+        hidden: true,
+      },
+      {
+        key: "settingsMaxValueCredito",
+        label: "Presupuesto crédito",
+        sql: `SELECT COALESCE(CAST(value AS DECIMAL(20,2)), 0) AS value
+              FROM {db}.mc_settings WHERE \`key\` = 'budget_api_credito' LIMIT 1;`,
+        baseTable: "mc_settings",
+        hidden: true,
+      },
     ],
     charts: [...COMMON_CHARTS],
     sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
