@@ -52,6 +52,7 @@ interface ActivitySectionProps {
   loginTypeDistribution: LoginTypeDistributionEntry[];
   loginHeatmapData: LoginHeatmapData;
   annotations?: ActivityAnnotation[];
+  bank?: string;
 }
 
 const ActivitySection = ({
@@ -63,7 +64,9 @@ const ActivitySection = ({
   loginTypeDistribution,
   loginHeatmapData,
   annotations,
+  bank,
 }: ActivitySectionProps) => {
+  const isTuya = bank === "tuya";
   const hasActivityData = activityDataset.length > 0;
   const hasLoginTypeDistribution = loginTypeDistribution.length > 0;
   const hasHeatmapData =
@@ -73,22 +76,23 @@ const ActivitySection = ({
   return (
     <Space direction="vertical" size="large" style={{ width: "100%" }}>
       <Row gutter={[24, 32]} align="stretch">
-        <Col xs={24} xl={12} className="activity-col">
+        <Col xs={24} xl={isTuya ? 24 : 12} className="activity-col">
           <Card className="activity-card">
             <div className="activity-heading">
               <div className="activity-header">
                 <Title level={4} className="activity-title">
-                  Logins vs redenciones válidas diarias
+                  {isTuya ? "Logins diarios" : "Logins vs redenciones válidas diarias"}
                 </Title>
                 <div className="activity-separator" />
               </div>
               <Text type="secondary" className="activity-subtitle">
-                Evolución diaria de logins y redenciones válidas con los filtros
-                actuales (excluye intentos fallidos).
+                {isTuya
+                  ? "Evolución diaria de logins con los filtros actuales."
+                  : "Evolución diaria de logins y redenciones válidas con los filtros actuales (excluye intentos fallidos)."}
               </Text>
             </div>
 
-            {error && <Alert type="error" message={error} showIcon />} 
+            {error && <Alert type="error" message={error} showIcon />}
 
             <div className="activity-body">
               <Spin spinning={loadingActivity}>
@@ -97,7 +101,7 @@ const ActivitySection = ({
                     <ResponsiveContainer width="100%" height={380}>
                       <ReLineChart
                         data={activityDataset}
-                        margin={{ top: 24, right: 48, left: 48, bottom: 24 }}
+                        margin={{ top: 24, right: isTuya ? 16 : 48, left: 48, bottom: 24 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis
@@ -125,20 +129,22 @@ const ActivitySection = ({
                             style: { textAnchor: "middle" },
                           }}
                         />
-                        <YAxis
-                          yAxisId="redemptions"
-                          orientation="right"
-                          domain={[0, axisExtents.redemptions]}
-                          tickFormatter={(value: number) => formatNumber(value)}
-                          tick={{ fontSize: 12 }}
-                          label={{
-                            value: "Redenciones válidas",
-                            angle: -90,
-                            position: "insideRight",
-                            offset: -4,
-                            style: { textAnchor: "middle" },
-                          }}
-                        />
+                        {!isTuya ? (
+                          <YAxis
+                            yAxisId="redemptions"
+                            orientation="right"
+                            domain={[0, axisExtents.redemptions]}
+                            tickFormatter={(value: number) => formatNumber(value)}
+                            tick={{ fontSize: 12 }}
+                            label={{
+                              value: "Redenciones válidas",
+                              angle: -90,
+                              position: "insideRight",
+                              offset: -4,
+                              style: { textAnchor: "middle" },
+                            }}
+                          />
+                        ) : null}
                         <RechartsTooltip
                           formatter={(value: number, name: string) => [
                             formatNumber(value),
@@ -162,16 +168,18 @@ const ActivitySection = ({
                           dot={false}
                           isAnimationActive={false}
                         />
-                        <Line
-                          yAxisId="redemptions"
-                          type="monotone"
-                          dataKey="redemptionsCount"
-                          name="Redenciones válidas"
-                          stroke="#f79e1b"
-                          strokeWidth={2}
-                          dot={false}
-                          isAnimationActive={false}
-                        />
+                        {!isTuya ? (
+                          <Line
+                            yAxisId="redemptions"
+                            type="monotone"
+                            dataKey="redemptionsCount"
+                            name="Redenciones válidas"
+                            stroke="#f79e1b"
+                            strokeWidth={2}
+                            dot={false}
+                            isAnimationActive={false}
+                          />
+                        ) : null}
                         {(annotations ?? []).map((annotation) => (
                           <ReferenceLine
                             key={`${annotation.date}-${annotation.label}`}
@@ -227,7 +235,8 @@ const ActivitySection = ({
             </div>
           </Card>
         </Col>
-        <Col xs={24} xl={12} className="activity-col">
+        {/* Tuya bank: no redemption mechanic, hide accumulated value chart */}
+        {!isTuya ? <Col xs={24} xl={12} className="activity-col">
           <Card className="activity-card">
             <div className="activity-heading">
               <div className="activity-header">
@@ -363,7 +372,7 @@ const ActivitySection = ({
               </Spin>
             </div>
           </Card>
-        </Col>
+        </Col> : null}
       </Row>
 
       <Row gutter={[24, 32]} align="stretch">

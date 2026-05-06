@@ -15,6 +15,9 @@ export interface Campaign {
   name: string;
   description: string;
   database?: string;
+  bank?: string;
+  userTypeColumn?: string;
+  firstLoginsPivotColumn?: string;
   features?: CampaignFeatures;
   baselineUsers?: number | null;
   enrollmentGoals?: EnrollmentGoal[] | null;

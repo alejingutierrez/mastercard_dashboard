@@ -61,6 +61,7 @@ import {
   fetchCampaignLoginSecurity,
   fetchFirstLoginsByDate,
   fetchEnrolledUsers,
+  fetchRedeemedUsers,
   fetchCampaignSegments,
   fetchCampaignUserTypes,
   fetchEnrollmentFunnel,
@@ -213,6 +214,14 @@ const KPI_DEFINITIONS: KpiDefinition[] = [
     help: "Logins exitosos y autologins dividido entre usuarios inscritos.",
   },
 ];
+
+// KPI cards that are not applicable for Tuya (no redemption mechanic)
+const TUYA_HIDDEN_KPI_KEYS = new Set([
+  "totalRedemptions",
+  "totalWinners",
+  "totalRedeemedValue",
+  "valorDisponible",
+]);
 
 const LOGIN_TYPE_OPTIONS = [
   { value: "0", label: "Login no exitoso (0)" },
@@ -416,6 +425,13 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
 
   const totalCampaignCount = campaigns.length;
 
+  const selectedCampaignBank = useMemo<string | null>(() => {
+    if (!selectedCampaign) return null;
+    return campaigns.find((c) => c.id === selectedCampaign)?.bank ?? null;
+  }, [campaigns, selectedCampaign]);
+
+  const isTuya = selectedCampaignBank === "tuya";
+
   const menuItems = useMemo<MenuProps["items"]>(() => {
     const items: MenuProps["items"] = [
       {
@@ -423,17 +439,22 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         label: "Overview",
         icon: <AppstoreOutlined />,
       },
-      {
+    ];
+
+    // Tuya campaigns do not use a redemption mechanic — hide the tab
+    if (!isTuya) {
+      items.push({
         key: "redemptions",
         label: "Redenciones",
         icon: <PieChartOutlined />,
-      },
-      {
-        key: "login-security",
-        label: "Logins y seguridad",
-        icon: <SafetyCertificateOutlined />,
-      },
-    ];
+      });
+    }
+
+    items.push({
+      key: "login-security",
+      label: "Logins y seguridad",
+      icon: <SafetyCertificateOutlined />,
+    });
 
     if (currentUser.role === "admin") {
       items.push({
@@ -444,7 +465,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     }
 
     return items;
-  }, [currentUser.role]);
+  }, [currentUser.role, isTuya]);
 
   const userMenuItems = useMemo<MenuProps["items"]>(() => {
     const items: MenuProps["items"] = [
@@ -484,6 +505,13 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       setSelectedMenu("overview");
     }
   }, [currentUser.role, selectedMenu]);
+
+  // Tuya campaigns don't have a redemption mechanic — bounce back to overview
+  useEffect(() => {
+    if (isTuya && selectedMenu === "redemptions") {
+      setSelectedMenu("overview");
+    }
+  }, [isTuya, selectedMenu]);
 
   const openProfileModal = useCallback(() => {
     profileForm.setFieldsValue({
@@ -1567,19 +1595,31 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           });
         }
         if (selectedCampaign && selectedCampaign !== "all") {
-          const enrolledFilters: Parameters<typeof fetchEnrolledUsers>[1] = {};
+          const exportFilters: Parameters<typeof fetchEnrolledUsers>[1] = {};
           if (sharedQueryFilters.from && sharedQueryFilters.to) {
-            enrolledFilters.from = sharedQueryFilters.from;
-            enrolledFilters.to = sharedQueryFilters.to;
+            exportFilters.from = sharedQueryFilters.from;
+            exportFilters.to = sharedQueryFilters.to;
           }
-          if (sharedQueryFilters.segment) enrolledFilters.segment = sharedQueryFilters.segment;
-          if (sharedQueryFilters.userType) enrolledFilters.userType = sharedQueryFilters.userType;
-          const enrolledData = await fetchEnrolledUsers(selectedCampaign, enrolledFilters);
+          if (sharedQueryFilters.segment) exportFilters.segment = sharedQueryFilters.segment;
+          if (sharedQueryFilters.userType) exportFilters.userType = sharedQueryFilters.userType;
+
+          const enrolledData = await fetchEnrolledUsers(selectedCampaign, exportFilters);
           if (enrolledData.rows.length) {
             sheets.push({
               name: "Usuarios Inscritos",
               data: enrolledData.rows as unknown as Record<string, unknown>[],
             });
+          }
+
+          const selectedCampaignObj = campaigns.find((c) => c.id === selectedCampaign);
+          if (selectedCampaignObj?.bank === "davivienda") {
+            const redeemedData = await fetchRedeemedUsers(selectedCampaign, exportFilters);
+            if (redeemedData.rows.length) {
+              sheets.push({
+                name: "Usuarios Redimidos",
+                data: redeemedData.rows as unknown as Record<string, unknown>[],
+              });
+            }
           }
         }
       } else if (selectedMenu === "redemptions") {
@@ -1738,6 +1778,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
               loginTypeDistribution={loginTypeDistribution}
               loginHeatmapData={loginHeatmapData}
               annotations={activity?.annotations}
+              bank={selectedCampaignBank ?? undefined}
             />
           </>
         );
@@ -2175,6 +2216,9 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                         </div>
                         <Row gutter={[16, 16]} className="kpi-grid">
                           {KPI_DEFINITIONS.map((definition, index) => {
+                            // Tuya bank: hide redemption-related KPI cards
+                            if (isTuya && TUYA_HIDDEN_KPI_KEYS.has(definition.key)) return null;
+
                             // Skip valorDisponible if settingsMaxValue is null
                             if (definition.key === "valorDisponible") {
                               const maxVal = metricsByKey.get("settingsMaxValue")?.value ?? null;

@@ -49,10 +49,13 @@ router.use((req, res, next) => {
 });
 
 router.get("/", (req, res) => {
-  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description, features, baselineUsers, enrollmentGoals }) => ({
+  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description, bank, userTypeColumn, firstLoginsPivotColumn, features, baselineUsers, enrollmentGoals }) => ({
     id,
     name,
     description,
+    bank: bank ?? null,
+    userTypeColumn: userTypeColumn ?? null,
+    firstLoginsPivotColumn: firstLoginsPivotColumn ?? null,
     features: features ?? {},
     baselineUsers: baselineUsers ?? null,
     enrollmentGoals: enrollmentGoals ?? null,
@@ -291,7 +294,10 @@ const applyFiltersToSql = ({
   filters = {},
   range,
 }) => {
-  const { loginType, userId, userIp, segment, userType } = filters;
+  const { loginType, userId, userIp, segment, userType, userTypeColumn } = filters;
+  const utCol = (typeof userTypeColumn === "string" && userTypeColumn.length > 0 && userTypeColumn !== "undefined" && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn))
+    ? userTypeColumn
+    : "user_type";
   if (!loginType && !userId && !userIp && !segment && !userType) {
     return { sql, params };
   }
@@ -345,14 +351,14 @@ const applyFiltersToSql = ({
     }
   }
 
-  // userType filter: subquery into mc_users
+  // userType filter: subquery into mc_users (column name comes from campaign.userTypeColumn)
   if (userType && tableCapabilities.hasIdmask) {
     if (baseTableName === "mc_users") {
-      additionalConditions.push(`${columnRef("user_type")} = %s`);
+      additionalConditions.push(`${columnRef(utCol)} = %s`);
       nextParams.push(userType);
     } else {
       additionalConditions.push(
-        `${columnRef("idmask")} IN (SELECT idmask FROM {db}.mc_users WHERE user_type = %s)`
+        `${columnRef("idmask")} IN (SELECT idmask FROM {db}.mc_users WHERE ${utCol} = %s)`
       );
       nextParams.push(userType);
     }
@@ -434,6 +440,7 @@ const buildMonthlyLoginSummaryQuery = ({
   userIp,
   segment,
   userType,
+  userTypeColumn = "user_type",
 }) => {
   const params = [MONTH_START_FORMAT];
   const conditions = [
@@ -467,7 +474,8 @@ const buildMonthlyLoginSummaryQuery = ({
   }
 
   if (userType) {
-    conditions.push("u.user_type = %s");
+    const utCol = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn) ? userTypeColumn : "user_type";
+    conditions.push(`u.${utCol} = %s`);
     params.push(userType);
   }
 
@@ -495,6 +503,7 @@ const buildMonthlyRedemptionSummaryQuery = ({
   userIp,
   segment,
   userType,
+  userTypeColumn = "user_type",
 }) => {
   const params = [MONTH_START_FORMAT];
   const conditions = [
@@ -531,7 +540,8 @@ const buildMonthlyRedemptionSummaryQuery = ({
   }
 
   if (userType) {
-    conditions.push("u.user_type = %s");
+    const utCol = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn) ? userTypeColumn : "user_type";
+    conditions.push(`u.${utCol} = %s`);
     params.push(userType);
   }
 
@@ -573,6 +583,7 @@ const buildMonthlyTracingSummaryQuery = ({
   userIp,
   segment,
   userType,
+  userTypeColumn = "user_type",
 }) => {
   const params = [MONTH_START_FORMAT];
   const dateExpression = "STR_TO_DATE(t.date_update, '%d-%m-%Y')";
@@ -599,7 +610,8 @@ const buildMonthlyTracingSummaryQuery = ({
   }
 
   if (userType) {
-    conditions.push("u.user_type = %s");
+    const utCol = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn) ? userTypeColumn : "user_type";
+    conditions.push(`u.${utCol} = %s`);
     params.push(userType);
   }
 
@@ -639,6 +651,7 @@ const buildGoalSummaryQuery = ({
   userIp,
   segment,
   userType,
+  userTypeColumn = "user_type",
 }) => {
   const conditions = [
     `(idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
@@ -651,7 +664,8 @@ const buildGoalSummaryQuery = ({
   }
 
   if (userType) {
-    conditions.push("user_type = %s");
+    const utCol = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn) ? userTypeColumn : "user_type";
+    conditions.push(`${utCol} = %s`);
     params.push(userType);
   }
 
@@ -692,6 +706,7 @@ const buildGoalBreakdownQuery = ({
   userIp,
   segment,
   userType,
+  userTypeColumn = "user_type",
 }) => {
   const conditions = [
     `(idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
@@ -704,7 +719,8 @@ const buildGoalBreakdownQuery = ({
   }
 
   if (userType) {
-    conditions.push("user_type = %s");
+    const utCol = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn) ? userTypeColumn : "user_type";
+    conditions.push(`${utCol} = %s`);
     params.push(userType);
   }
 
@@ -1200,6 +1216,7 @@ router.get("/comparison/monthly", async (req, res) => {
     const campaignNotes = [];
 
     for (const campaign of selectedCampaigns) {
+      const campaignUserTypeColumn = campaign.userTypeColumn || "user_type";
       const loginQuery = buildMonthlyLoginSummaryQuery({
         range,
         loginType,
@@ -1207,6 +1224,7 @@ router.get("/comparison/monthly", async (req, res) => {
         userIp,
         segment,
         userType,
+        userTypeColumn: campaignUserTypeColumn,
       });
       const redemptionQuery = buildMonthlyRedemptionSummaryQuery({
         range,
@@ -1215,6 +1233,7 @@ router.get("/comparison/monthly", async (req, res) => {
         userIp,
         segment,
         userType,
+        userTypeColumn: campaignUserTypeColumn,
       });
       const tracingQuery = buildMonthlyTracingSummaryQuery({
         range,
@@ -1223,6 +1242,7 @@ router.get("/comparison/monthly", async (req, res) => {
         userIp,
         segment,
         userType,
+        userTypeColumn: campaignUserTypeColumn,
       });
       const goalQuery = buildGoalSummaryQuery({
         range,
@@ -1231,6 +1251,7 @@ router.get("/comparison/monthly", async (req, res) => {
         userIp,
         segment,
         userType,
+        userTypeColumn: campaignUserTypeColumn,
       });
       const goalBreakdownQuery = buildGoalBreakdownQuery({
         range,
@@ -1239,6 +1260,7 @@ router.get("/comparison/monthly", async (req, res) => {
         userIp,
         segment,
         userType,
+        userTypeColumn: campaignUserTypeColumn,
       });
 
       let loginResult;
@@ -1269,7 +1291,7 @@ router.get("/comparison/monthly", async (req, res) => {
             goalBreakdownQuery.params
           ),
           collectSegments(campaign.database),
-          collectUserTypes(campaign.database),
+          collectUserTypes(campaign.database, campaignUserTypeColumn),
         ]);
       } catch (error) {
         console.error(
@@ -1632,7 +1654,8 @@ router.get("/:id/summary", async (req, res) => {
     const userIp = normalizeSelectorValue(req.query.userIp);
     const segment = normalizeSelectorValue(req.query.segment);
     const userType = normalizeSelectorValue(req.query.userType);
-    const filters = { loginType, userId, userIp, segment, userType };
+    const userTypeColumn = campaign.userTypeColumn || "user_type";
+    const filters = { loginType, userId, userIp, segment, userType, userTypeColumn };
 
     const metricsPromise = Promise.all(
       (campaign.metrics || []).map(async (metric) => {
@@ -1782,7 +1805,7 @@ router.get("/:id/user-types", async (req, res) => {
     });
   }
   try {
-    const userTypes = await collectUserTypes(campaign.database);
+    const userTypes = await collectUserTypes(campaign.database, campaign.userTypeColumn || "user_type");
     res.json({ userTypes });
   } catch (error) {
     console.error("[user-types] Error", error);
@@ -1960,15 +1983,24 @@ router.get("/:id/first-logins-by-date", async (req, res) => {
   const userType = normalizeSelectorValue(req.query.userType);
 
   try {
-    // Cargar segmentos reales de la campaña para construir columnas dinámicas
-    const campaignSegments = await collectSegments(campaign.database);
-
-    const toAlias = (seg) => "seg_" + seg.toLowerCase().replace(/[^a-z0-9]/g, "_");
+    const toAlias = (val) => "seg_" + val.toLowerCase().replace(/[^a-z0-9]/g, "_");
     const escapeStr = (s) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const safeCol = (val, fallback) =>
+      (typeof val === "string" && val.length > 0 && val !== "undefined" && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(val))
+        ? val : fallback;
+    const utCol = safeCol(campaign.userTypeColumn, "user_type");
 
-    const segCases = campaignSegments.map(
-      (seg) =>
-        `SUM(CASE WHEN TRIM(COALESCE(u.segment,'')) = '${escapeStr(seg)}' THEN 1 ELSE 0 END) AS ${toAlias(seg)}`
+    // Determinar columna de pivot: user_status para Tuya, segment para el resto
+    const pivotCol = safeCol(campaign.firstLoginsPivotColumn, "segment");
+
+    // Cargar valores distintos de la columna de pivot para construir columnas dinámicas
+    const pivotValues = pivotCol === "segment"
+      ? await collectSegments(campaign.database)
+      : await collectUserTypes(campaign.database, pivotCol);
+
+    const pivotCases = pivotValues.map(
+      (val) =>
+        `SUM(CASE WHEN TRIM(COALESCE(u.${pivotCol},'')) = '${escapeStr(val)}' THEN 1 ELSE 0 END) AS ${toAlias(val)}`
     );
 
     const dateFilter = range
@@ -1978,10 +2010,10 @@ router.get("/:id/first-logins-by-date", async (req, res) => {
       ? `AND u.segment = '${escapeStr(segment)}'`
       : "";
     const userTypeFilter = userType
-      ? `AND u.user_type = '${escapeStr(userType)}'`
+      ? `AND u.${utCol} = '${escapeStr(userType)}'`
       : "";
 
-    const selectCases = segCases.length > 0 ? ",\n                   " + segCases.join(",\n                   ") : "";
+    const selectCases = pivotCases.length > 0 ? ",\n                   " + pivotCases.join(",\n                   ") : "";
 
     const sql = `SELECT
                    DATE_FORMAT(t.first_login, '%Y-%m-%d') AS fecha,
@@ -2001,9 +2033,9 @@ router.get("/:id/first-logins-by-date", async (req, res) => {
                  ORDER BY fecha ASC;`;
 
     const result = await runQuery(campaign.database, sql, []);
-    const segmentMeta = campaignSegments.map((seg) => ({
-      label: seg,
-      key: toAlias(seg),
+    const segmentMeta = pivotValues.map((val) => ({
+      label: val,
+      key: toAlias(val),
     }));
     res.json({ rows: result.rows || [], segments: segmentMeta });
   } catch (error) {
@@ -2029,19 +2061,20 @@ router.get("/:id/enrolled-users", async (req, res) => {
   const userType = normalizeSelectorValue(req.query.userType);
 
   try {
+    const utCol = (typeof campaign.userTypeColumn === "string" && campaign.userTypeColumn.length > 0 && campaign.userTypeColumn !== "undefined" && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(campaign.userTypeColumn)) ? campaign.userTypeColumn : "user_type";
     const escapeStr = (s) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const dateFilter = range
       ? `AND t.first_login BETWEEN '${range.from}' AND '${range.to} 23:59:59'`
       : "";
     const segmentFilter = segment ? `AND u.segment = '${escapeStr(segment)}'` : "";
-    const userTypeFilter = userType ? `AND u.user_type = '${escapeStr(userType)}'` : "";
+    const userTypeFilter = userType ? `AND u.${utCol} = '${escapeStr(userType)}'` : "";
 
     const sql = `
       SELECT
         t.idmask,
         DATE_FORMAT(t.first_login, '%Y-%m-%d') AS fecha_inscripcion,
         COALESCE(u.segment, '') AS segmento,
-        COALESCE(u.user_type, '') AS tipo_usuario
+        COALESCE(u.${utCol}, '') AS tipo_usuario
       FROM (
         SELECT idmask, MIN(date) AS first_login
         FROM {db}.mc_logins
@@ -2064,6 +2097,59 @@ router.get("/:id/enrolled-users", async (req, res) => {
   }
 });
 
+router.get("/:id/redeemed-users", async (req, res) => {
+  const campaign = req.allowedCampaigns.find(({ id }) => id === req.params.id);
+  if (!campaign) {
+    const isKnownCampaign = Boolean(getCampaignById(req.params.id));
+    return res.status(isKnownCampaign ? 403 : 404).json({
+      error: isKnownCampaign ? "No tienes acceso a esta campaña." : "Campaña no encontrada",
+    });
+  }
+
+  const range = parseDateRange(req.query);
+  const segment = normalizeSelectorValue(req.query.segment);
+  const userType = normalizeSelectorValue(req.query.userType);
+
+  try {
+    const utCol = (typeof campaign.userTypeColumn === "string" && campaign.userTypeColumn.length > 0 && campaign.userTypeColumn !== "undefined" && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(campaign.userTypeColumn)) ? campaign.userTypeColumn : "user_type";
+    const escapeStr = (s) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const dateFilter = range
+      ? `AND r.date BETWEEN '${range.from}' AND '${range.to} 23:59:59'`
+      : "";
+    const segmentFilter = segment ? `AND u.segment = '${escapeStr(segment)}'` : "";
+    const userTypeFilter = userType ? `AND u.${utCol} = '${escapeStr(userType)}'` : "";
+
+    const sql = `
+      SELECT
+        r.idmask,
+        DATE_FORMAT(r.date, '%Y-%m-%d') AS fecha_redencion,
+        r.value AS valor,
+        COALESCE(u.segment, '') AS segmento,
+        COALESCE(u.${utCol}, '') AS tipo_usuario
+      FROM {db}.mc_redemptions r
+      LEFT JOIN {db}.mc_users u ON u.idmask = r.idmask
+      WHERE r.idmask IS NOT NULL
+        AND TRIM(r.idmask) <> ''
+        AND r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+        AND r.block IN (1, 2)
+        AND r.id_award IS NOT NULL
+        AND r.id_award <> 0
+        AND r.value IS NOT NULL
+        AND r.value > 0
+        AND r.date IS NOT NULL
+        AND r.date <> '0000-00-00 00:00:00'
+        ${dateFilter} ${segmentFilter} ${userTypeFilter}
+      ORDER BY r.date ASC, r.idmask ASC;
+    `;
+
+    const result = await runQuery(campaign.database, sql, []);
+    res.json({ rows: result.rows || [] });
+  } catch (error) {
+    console.error("[redeemed-users] Error", error);
+    res.status(500).json({ error: "No se pudo obtener los usuarios redimidos.", detail: error.message });
+  }
+});
+
 router.get("/:id/redemptions-insights", async (req, res) => {
   const campaign = req.allowedCampaigns.find(
     ({ id }) => id === req.params.id
@@ -2083,8 +2169,9 @@ router.get("/:id/redemptions-insights", async (req, res) => {
   const userIp = normalizeSelectorValue(req.query.userIp);
   const segment = normalizeSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
+  const userTypeColumn = campaign.userTypeColumn || "user_type";
 
-  const filters = { loginType, userId, userIp, segment, userType };
+  const filters = { loginType, userId, userIp, segment, userType, userTypeColumn };
 
   try {
     const amountQuery = buildRedemptionAmountDistributionQuery({ range });
@@ -2315,6 +2402,7 @@ const buildLoginSeriesQuery = ({
   userType,
   userId,
   userIp,
+  userTypeColumn = "user_type",
 }) => {
   const needsUserJoin = Boolean(segment || userType);
   const conditions = [
@@ -2333,7 +2421,8 @@ const buildLoginSeriesQuery = ({
   }
 
   if (userType) {
-    conditions.push("u.user_type = %s");
+    const utCol = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn) ? userTypeColumn : "user_type";
+    conditions.push(`u.${utCol} = %s`);
     params.push(userType);
   }
 
@@ -2379,6 +2468,7 @@ const buildRedemptionSeriesQuery = ({
   loginType,
   userId,
   userIp,
+  userTypeColumn = "user_type",
 }) => {
   const conditions = [
     `(r.idmask IS NULL OR r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
@@ -2420,7 +2510,8 @@ const buildRedemptionSeriesQuery = ({
   }
 
   if (userType) {
-    conditions.push("u.user_type = %s");
+    const utCol = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn) ? userTypeColumn : "user_type";
+    conditions.push(`u.${utCol} = %s`);
     params.push(userType);
   }
 
@@ -2471,6 +2562,7 @@ const buildLoginTypeDistributionQuery = ({
   loginType,
   userId,
   userIp,
+  userTypeColumn = "user_type",
 }) => {
   const needsUserJoin = Boolean(segment || userType);
   const conditions = [
@@ -2489,7 +2581,8 @@ const buildLoginTypeDistributionQuery = ({
   }
 
   if (userType) {
-    conditions.push("u.user_type = %s");
+    const utCol = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn) ? userTypeColumn : "user_type";
+    conditions.push(`u.${utCol} = %s`);
     params.push(userType);
   }
 
@@ -2527,7 +2620,7 @@ const buildLoginTypeDistributionQuery = ({
   return { sql, params };
 };
 
-const buildLoginHeatmapQuery = ({ range, segment, userType, loginType, userId, userIp }) => {
+const buildLoginHeatmapQuery = ({ range, segment, userType, loginType, userId, userIp, userTypeColumn = "user_type" }) => {
   const needsUserJoin = Boolean(segment || userType);
   const conditions = [
     `(l.idmask IS NULL OR l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL})`,
@@ -2547,7 +2640,8 @@ const buildLoginHeatmapQuery = ({ range, segment, userType, loginType, userId, u
   }
 
   if (userType) {
-    conditions.push("u.user_type = %s");
+    const utCol = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(userTypeColumn) ? userTypeColumn : "user_type";
+    conditions.push(`u.${utCol} = %s`);
     params.push(userType);
   }
 
@@ -2618,28 +2712,29 @@ const collectSegments = async (database) => {
     .map((value) => value.trim());
 };
 
-const collectUserTypes = async (database) => {
+const collectUserTypes = async (database, column = "user_type") => {
+  const safeColumn = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(column) ? column : "user_type";
   const sql = `
-    SELECT DISTINCT user_type
+    SELECT DISTINCT ${safeColumn} AS user_type_value
     FROM {db}.mc_users
-    WHERE user_type IS NOT NULL
-      AND user_type <> ''
+    WHERE ${safeColumn} IS NOT NULL
+      AND ${safeColumn} <> ''
       AND (idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL})
-    ORDER BY user_type
+    ORDER BY ${safeColumn}
     LIMIT 50;
   `;
   try {
     const result = await runQuery(database, sql);
     return (result.rows || [])
-      .map((row) => row.user_type)
+      .map((row) => row.user_type_value)
       .filter((value) => value !== null && value !== undefined)
       .map((value) => String(value).trim())
       .filter((value) => value.length > 0);
   } catch (error) {
     const message = error?.message || "";
-    if (/Unknown column 'user_type'/i.test(message) || /1054/.test(message)) {
+    if (/Unknown column/i.test(message) || /1054/.test(message)) {
       console.warn(
-        `[collectUserTypes] Columna user_type no disponible en ${database}. Se omite filtro.`,
+        `[collectUserTypes] Columna ${safeColumn} no disponible en ${database}. Se omite filtro.`,
         message
       );
       return [];
@@ -2906,6 +3001,7 @@ router.get("/:id/activity", async (req, res) => {
     const annotations = [];
 
     for (const campaign of selectedCampaigns) {
+      const campaignUserTypeColumn = campaign.userTypeColumn || "user_type";
       const [
         loginSeriesQuery,
         redemptionSeriesQuery,
@@ -2919,6 +3015,7 @@ router.get("/:id/activity", async (req, res) => {
           userType,
           userId,
           userIp,
+          userTypeColumn: campaignUserTypeColumn,
         }),
         buildRedemptionSeriesQuery({
           range,
@@ -2927,6 +3024,7 @@ router.get("/:id/activity", async (req, res) => {
           loginType,
           userId,
           userIp,
+          userTypeColumn: campaignUserTypeColumn,
         }),
         buildLoginTypeDistributionQuery({
           range,
@@ -2935,6 +3033,7 @@ router.get("/:id/activity", async (req, res) => {
           loginType,
           userId,
           userIp,
+          userTypeColumn: campaignUserTypeColumn,
         }),
         buildLoginHeatmapQuery({
           range,
@@ -2943,6 +3042,7 @@ router.get("/:id/activity", async (req, res) => {
           loginType,
           userId,
           userIp,
+          userTypeColumn: campaignUserTypeColumn,
         }),
       ];
 
@@ -2965,7 +3065,7 @@ router.get("/:id/activity", async (req, res) => {
         runQuery(campaign.database, loginHeatmapQuery.sql, loginHeatmapQuery.params),
         collectLoginTypes(campaign.database),
         includeFilters ? collectSegments(campaign.database) : Promise.resolve([]),
-        includeFilters ? collectUserTypes(campaign.database) : Promise.resolve([]),
+        includeFilters ? collectUserTypes(campaign.database, campaignUserTypeColumn) : Promise.resolve([]),
       ]);
 
       mergeSeriesRows(aggregateMap, loginSeries.rows, {
@@ -3313,7 +3413,8 @@ router.get("/:id/login-security", async (req, res) => {
   const userIp = normalizeSelectorValue(req.query.userIp);
   const segment = normalizeSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
-  const filters = { loginType, userId, userIp, segment, userType };
+  const userTypeColumn = campaign.userTypeColumn || "user_type";
+  const filters = { loginType, userId, userIp, segment, userType, userTypeColumn };
 
   try {
     const metadataNotes = [];

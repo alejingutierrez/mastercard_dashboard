@@ -195,6 +195,7 @@ const CAMPAIGNS = [
     id: "debitazo-5",
     name: "Debitazo 5",
     database: "dentsu_mastercard_debitazo_5",
+    bank: "davivienda",
     baselineUsers: null,
     description:
       "Campaña Mastercard Debitazo 5. Indicadores de usuarios, logins y redenciones.",
@@ -210,6 +211,7 @@ const CAMPAIGNS = [
     id: "bogota-uso-10",
     name: "Bogotá Uso 10",
     database: "dentsu_mastercard_bogota_uso_10",
+    bank: "davivienda",
     baselineUsers: null,
     description:
       "Campaña de fidelización Bogotá Uso 10. Consultas basadas en las tablas mc_users, mc_logins y mc_redemptions.",
@@ -225,6 +227,7 @@ const CAMPAIGNS = [
     id: "debitazo-6",
     name: "Debitazo 6",
     database: "dentsu_mastercard_debitazo_6",
+    bank: "davivienda",
     baselineUsers: null,
     description:
       "Campaña Mastercard Debitazo 6. Indicadores de usuarios, logins y redenciones.",
@@ -240,6 +243,7 @@ const CAMPAIGNS = [
     id: "davivienda-afluentes-3",
     name: "Davivienda Afluentes 3",
     database: "dentsu_mastercard_davivienda_afluentes_3",
+    bank: "davivienda",
     baselineUsers: null,
     description:
       "Campaña Davivienda Afluentes. Indicadores agregados de usuarios, logins y redenciones.",
@@ -300,13 +304,16 @@ const CAMPAIGNS = [
     id: "tuya-ola-5",
     name: "Tuya Ola 5",
     database: "dentsu_mastercard_tuya_ola_5",
+    bank: "tuya",
+    userTypeColumn: "user_status",
+    firstLoginsPivotColumn: "user_status",
     baselineUsers: null,
     description:
       "Campaña Tuya Ola 5. Incluye indicadores generales de usuarios, logins y redenciones.",
     features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
-    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
+    sampleSql: `SELECT idmask, segment, user_status, goal_amount_1, goal_trx_1, award_1
                 FROM {db}.mc_users
                 WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
                 LIMIT 50;`,
@@ -315,13 +322,16 @@ const CAMPAIGNS = [
     id: "tuya-ola-6",
     name: "Tuya Ola 6",
     database: "dentsu_mastercard_tuya_ola_6",
+    bank: "tuya",
+    userTypeColumn: "user_status",
+    firstLoginsPivotColumn: "user_status",
     baselineUsers: null,
     description:
       "Campaña Tuya Ola 6. Incluye indicadores generales de usuarios, logins y redenciones.",
     features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
-    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_amount_2, challenge_1
+    sampleSql: `SELECT idmask, segment, user_status, goal_amount_1, goal_amount_2, challenge_1
                 FROM {db}.mc_users
                 WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
                 LIMIT 50;`,
@@ -360,10 +370,11 @@ const CAMPAIGNS = [
     id: "pongalas-a-jugar",
     name: "Pónganlas a Jugar",
     database: "dentsu_mastercard_pongalas_a_jugar",
+    bank: "davivienda",
     baselineUsers: 1847829,
     description:
       "Campaña Pónganlas a Jugar. Indicadores de usuarios, logins y redenciones.",
-    features: {},
+    features: { cardType: true, segments: true, firstLoginsTable: true },
     enrollmentGoals: [
       { segment: "Débito",  userTypeValue: "debito",  target: 79922 },
       { segment: "Crédito", userTypeValue: "credito", target: 9135 },
