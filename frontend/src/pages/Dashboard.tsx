@@ -181,7 +181,7 @@ const KPI_DEFINITIONS: KpiDefinition[] = [
     key: "usersWithLogin",
     label: "Usuarios Inscritos",
     format: "number",
-    help: "Usuarios únicos que realizaron al menos un login.",
+    help: "Usuarios cuyo primer login cayó en el rango de fechas filtrado. Coincide con el total de la tabla 'Loggins Inscritos por fecha'.",
   },
   {
     key: "totalRedemptions",

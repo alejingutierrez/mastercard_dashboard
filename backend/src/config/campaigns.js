@@ -32,14 +32,22 @@ const COMMON_METRICS = [
     baseTable: "mc_logins",
   },
   {
+    // Cuenta usuarios cuyo PRIMER login (type IN (1,2)) cayó en el rango filtrado.
+    // El subquery NO tiene WHERE interno (sino HAVING) para que applyFiltersToSql
+    // inyecte filtros en el WHERE externo y no rompa la query.
+    // MIN(IF(type IN (1,2), date, NULL)) ignora logins de type 0 al calcular el min.
+    // LEFT JOIN con mc_users (alias u) habilita filtros segment/userType al outer level.
     key: "usersWithLogin",
-    label: "Usuarios con login",
-    sql: `SELECT COUNT(DISTINCT idmask) AS value
-          FROM {db}.mc_logins
-          WHERE idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
-            AND type IN (1, 2);`,
-    dateColumn: "{db}.mc_logins.date",
-    baseTable: "mc_logins",
+    label: "Usuarios inscritos",
+    sql: `SELECT COUNT(*) AS value FROM (
+            SELECT idmask, MIN(IF(type IN (1,2), date, NULL)) AS first_login
+            FROM {db}.mc_logins
+            GROUP BY idmask
+            HAVING first_login IS NOT NULL
+               AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+          ) t LEFT JOIN {db}.mc_users u ON u.idmask = t.idmask WHERE 1=1`,
+    dateColumn: "t.first_login",
+    baseTable: "mc_users",
   },
   {
     key: "totalWinners",
