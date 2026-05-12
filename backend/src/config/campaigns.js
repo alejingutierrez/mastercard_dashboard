@@ -360,12 +360,63 @@ const CAMPAIGNS = [
                 LIMIT 50;`,
   },
   {
+    id: "pacifico-5s-7",
+    name: "Pacífico 5S 7",
+    database: "dentsu_mastercard_pacifico_5s_7",
+    bank: "pacifico",
+    baselineUsers: null,
+    description:
+      "Campaña Banco del Pacífico 5Steps - OLA 7. Sigue las mismas métricas agregadas del resto del dashboard.",
+    features: {},
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, award_1, challenge_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
+  {
     id: "avvillas-combo-playero",
     name: "AV Villas Combo Playero",
     database: "dentsu_mastercard_avvillas_combo_playero",
     baselineUsers: null,
     description:
       "Campaña AV Villas Combo Playero. Panel con KPIs de usuarios, logins y redenciones.",
+    features: {},
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
+  // ─────────────────────────────────────────────────────────────────────────
+  // AV Villas Lista Para Ganar — auto-pickup cuando la DB exista en Aurora.
+  //
+  // La DB `dentsu_mastercard_avvillas_lista_para_ganar` aún no existe en Aurora,
+  // pero la campaña está ACTIVA en el dashboard. El flag `pendingDb: true`
+  // marca esto en el frontend para mostrar un banner amigable al seleccionarla.
+  //
+  // Comportamiento mientras la DB no existe:
+  //   - El backend detecta el error MySQL "Unknown database" y responde
+  //     200 con `pending: true` en lugar de 500.
+  //   - El frontend muestra un Alert: "Esta campaña está en preparación...".
+  //   - KPIs, gráficas y tablas se renderizan vacíos sin errores.
+  //
+  // Apenas el equipo de AV Villas cree la DB en Aurora:
+  //   - Las queries empiezan a regresar datos automáticamente.
+  //   - No hay que tocar este archivo ni hacer deploy.
+  //   - Opcional: quitar `pendingDb: true` para esconder el banner.
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    id: "avvillas-lista-para-ganar",
+    name: "AV Villas Lista Para Ganar",
+    database: "dentsu_mastercard_avvillas_lista_para_ganar",
+    bank: "avvillas",
+    baselineUsers: null,
+    pendingDb: true, // banner UI; backend usa el match al error para auto-degradar
+    description:
+      "Campaña AV Villas Lista Para Ganar. KPIs estándar de usuarios, logins y redenciones.",
     features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
@@ -456,10 +507,15 @@ const CAMPAIGNS = [
   },
 ];
 
-const getCampaignById = (id) => CAMPAIGNS.find((campaign) => campaign.id === id);
+// Campañas activas en el dashboard (filtra las que están en preparación
+// marcadas con `enabled: false`).
+const ACTIVE_CAMPAIGNS = CAMPAIGNS.filter((c) => c.enabled !== false);
+
+const getCampaignById = (id) => ACTIVE_CAMPAIGNS.find((campaign) => campaign.id === id);
 
 module.exports = {
-  CAMPAIGNS,
+  CAMPAIGNS: ACTIVE_CAMPAIGNS,
+  ALL_CAMPAIGNS: CAMPAIGNS, // incluye las pendientes — solo para introspección/admin
   getCampaignById,
   EXCLUDED_IDMASKS,
   EXCLUDED_IDMASKS_SQL,

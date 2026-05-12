@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { AxiosRequestConfig } from "axios";
 import type {
   ActivityResponse,
   Campaign,
@@ -38,7 +39,8 @@ const stableParamsKey = (params?: Record<string, unknown>) => {
 const cachedGet = async <T>(
   url: string,
   params?: Record<string, unknown>,
-  ttlMs = 30_000
+  ttlMs = 30_000,
+  axiosConfig?: AxiosRequestConfig
 ): Promise<T> => {
   const key = `${url}?${stableParamsKey(params)}`;
   const now = Date.now();
@@ -48,7 +50,7 @@ const cachedGet = async <T>(
   }
 
   const promise = apiClient
-    .get<T>(url, { params })
+    .get<T>(url, { params, ...axiosConfig })
     .then(({ data }) => data);
 
   requestCache.set(key, { expiresAt: now + ttlMs, promise });
@@ -71,7 +73,7 @@ export interface SummaryFilters {
   loginType?: string;
   userId?: string;
   userIp?: string;
-  segment?: string;
+  segment?: string | string[];
   userType?: string;
   mode?: "kpis" | "full";
 }
@@ -158,18 +160,20 @@ export const fetchEnrolledUsers = async (
   return cachedGet(
     `/campaigns/${campaignId}/enrolled-users`,
     filters as Record<string, unknown> | undefined,
-    0 // sin caché — siempre fresco al exportar
+    0, // sin caché — siempre fresco al exportar
+    { timeout: 120_000 } // 2 min: el payload puede ser grande (decenas de miles de filas)
   );
 };
 
 export const fetchRedeemedUsers = async (
   campaignId: string,
   filters?: Pick<SummaryFilters, "from" | "to" | "segment" | "userType">
-): Promise<{ rows: { idmask: string; fecha_redencion: string; valor: number; segmento: string; tipo_usuario: string }[] }> => {
+): Promise<{ rows: { idmask: string; fecha_redencion: string; valor: number; win: string; segmento: string; tipo_usuario: string }[] }> => {
   return cachedGet(
     `/campaigns/${campaignId}/redeemed-users`,
     filters as Record<string, unknown> | undefined,
-    0 // sin caché — siempre fresco al exportar
+    0, // sin caché — siempre fresco al exportar
+    { timeout: 120_000 } // 2 min: aunque suele ser pocas filas, evita aborts en casos extremos
   );
 };
 

@@ -49,7 +49,7 @@ router.use((req, res, next) => {
 });
 
 router.get("/", (req, res) => {
-  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description, bank, userTypeColumn, firstLoginsPivotColumn, features, baselineUsers, enrollmentGoals }) => ({
+  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description, bank, userTypeColumn, firstLoginsPivotColumn, features, baselineUsers, enrollmentGoals, pendingDb }) => ({
     id,
     name,
     description,
@@ -59,6 +59,7 @@ router.get("/", (req, res) => {
     features: features ?? {},
     baselineUsers: baselineUsers ?? null,
     enrollmentGoals: enrollmentGoals ?? null,
+    pendingDb: Boolean(pendingDb),
   }));
 
   res.json(liteCampaigns);
@@ -127,6 +128,54 @@ const normalizeSelectorValue = (value) => {
   }
 
   return trimmed;
+};
+
+// Detecta el error característico de MySQL cuando la DB de la campaña no existe.
+// Útil para campañas pre-aprovisionadas en el repo cuya DB aún no fue creada
+// (ver `pendingDb: true` en campaigns.js — p.ej. AV Villas Lista Para Ganar).
+const isDbNotReadyError = (error) => {
+  if (!error || typeof error.message !== "string") return false;
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes("unknown database") ||
+    msg.includes("no database selected") ||
+    msg.includes("database does not exist") ||
+    msg.includes("er_bad_db_error")
+  );
+};
+
+// Helper para route handlers: si el error es "DB no existe", responde 200
+// con `pending: true` + un esqueleto compatible con el frontend.
+// Si es cualquier otro error, responde 500 normal.
+const respondPendingOr500 = (res, error, emptyShape, errorMessage) => {
+  if (isDbNotReadyError(error)) {
+    return res.status(200).json({ ...emptyShape, pending: true });
+  }
+  return res.status(500).json({ error: errorMessage, detail: error.message });
+};
+
+// Acepta string, array de strings o query repetida (?segment=A&segment=B).
+// Devuelve array de valores limpios o null si está vacío.
+const normalizeMultiSelectorValue = (value) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const arr = Array.isArray(value) ? value : [value];
+  const cleaned = arr
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter((v) => v && v.toLowerCase() !== "all");
+  return cleaned.length > 0 ? cleaned : null;
+};
+
+// Construye fragmento SQL `AND <col> IN ('a','b',...)` con escape básico.
+// `segment` puede ser string o string[]; si null/empty devuelve "".
+const buildSegmentInClause = (segment, columnExpr) => {
+  if (!segment) return "";
+  const list = Array.isArray(segment) ? segment : [segment];
+  if (list.length === 0) return "";
+  const escape = (s) => String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const values = list.map((s) => `'${escape(s)}'`).join(", ");
+  return `AND ${columnExpr} IN (${values})`;
 };
 
 const parseCampaignSelection = (rawValue, allowedCampaigns) => {
@@ -338,16 +387,19 @@ const applyFiltersToSql = ({
     nextParams.push(loginType);
   }
 
-  // segment filter: subquery into mc_users
+  // segment filter: scalar o array (multi-select). Subquery a mc_users si el baseTable no es mc_users.
   if (segment && tableCapabilities.hasIdmask) {
-    if (baseTableName === "mc_users") {
-      additionalConditions.push(`TRIM(${columnRef("segment")}) = %s`);
-      nextParams.push(segment);
-    } else {
-      additionalConditions.push(
-        `${columnRef("idmask")} IN (SELECT idmask FROM {db}.mc_users WHERE TRIM(segment) = %s)`
-      );
-      nextParams.push(segment);
+    const segments = Array.isArray(segment) ? segment : [segment];
+    if (segments.length > 0) {
+      const placeholders = segments.map(() => "%s").join(", ");
+      if (baseTableName === "mc_users") {
+        additionalConditions.push(`TRIM(${columnRef("segment")}) IN (${placeholders})`);
+      } else {
+        additionalConditions.push(
+          `${columnRef("idmask")} IN (SELECT idmask FROM {db}.mc_users WHERE TRIM(segment) IN (${placeholders}))`
+        );
+      }
+      nextParams.push(...segments);
     }
   }
 
@@ -1205,7 +1257,7 @@ router.get("/comparison/monthly", async (req, res) => {
   const loginType = normalizeSelectorValue(req.query.loginType);
   const userId = normalizeSelectorValue(req.query.userId);
   const userIp = normalizeSelectorValue(req.query.userIp);
-  const segment = normalizeSelectorValue(req.query.segment);
+  const segment = normalizeMultiSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
 
   try {
@@ -1652,7 +1704,7 @@ router.get("/:id/summary", async (req, res) => {
     const loginType = normalizeSelectorValue(req.query.loginType);
     const userId = normalizeSelectorValue(req.query.userId);
     const userIp = normalizeSelectorValue(req.query.userIp);
-    const segment = normalizeSelectorValue(req.query.segment);
+    const segment = normalizeMultiSelectorValue(req.query.segment);
     const userType = normalizeSelectorValue(req.query.userType);
     const userTypeColumn = campaign.userTypeColumn || "user_type";
     const filters = { loginType, userId, userIp, segment, userType, userTypeColumn };
@@ -1772,10 +1824,12 @@ router.get("/:id/summary", async (req, res) => {
     });
   } catch (error) {
     console.error("[summary] Error", error);
-    res.status(500).json({
-      error: "No se pudo obtener la información de la campaña",
-      detail: error.message,
-    });
+    respondPendingOr500(
+      res,
+      error,
+      { campaignId: campaign.id, metrics: [], filters: {}, baselineUsers: null, enrollmentGoals: null },
+      "No se pudo obtener la información de la campaña"
+    );
   }
 });
 
@@ -1792,7 +1846,7 @@ router.get("/:id/segments", async (req, res) => {
     res.json({ segments });
   } catch (error) {
     console.error("[segments] Error", error);
-    res.status(500).json({ error: "No se pudo obtener los segmentos", detail: error.message });
+    respondPendingOr500(res, error, { segments: [] }, "No se pudo obtener los segmentos");
   }
 });
 
@@ -1809,7 +1863,7 @@ router.get("/:id/user-types", async (req, res) => {
     res.json({ userTypes });
   } catch (error) {
     console.error("[user-types] Error", error);
-    res.status(500).json({ error: "No se pudo obtener los tipos de usuario", detail: error.message });
+    respondPendingOr500(res, error, { userTypes: [] }, "No se pudo obtener los tipos de usuario");
   }
 });
 
@@ -1979,7 +2033,7 @@ router.get("/:id/first-logins-by-date", async (req, res) => {
   }
 
   const range = parseDateRange(req.query);
-  const segment = normalizeSelectorValue(req.query.segment);
+  const segment = normalizeMultiSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
 
   try {
@@ -2006,9 +2060,7 @@ router.get("/:id/first-logins-by-date", async (req, res) => {
     const dateFilter = range
       ? `AND t.first_login BETWEEN '${range.from}' AND '${range.to}'`
       : "";
-    const segmentFilter = segment
-      ? `AND u.segment = '${escapeStr(segment)}'`
-      : "";
+    const segmentFilter = buildSegmentInClause(segment, "u.segment");
     const userTypeFilter = userType
       ? `AND u.${utCol} = '${escapeStr(userType)}'`
       : "";
@@ -2040,12 +2092,14 @@ router.get("/:id/first-logins-by-date", async (req, res) => {
     res.json({ rows: result.rows || [], segments: segmentMeta });
   } catch (error) {
     console.error("[first-logins-by-date] Error", error);
-    res.status(500).json({
-      error: "No se pudo obtener los loggins inscritos",
-      detail: error.message,
-    });
+    respondPendingOr500(res, error, { rows: [], segments: [] }, "No se pudo obtener los loggins inscritos");
   }
 });
+
+// Chunking: cada invocación Lambda devuelve <= CHUNK_SIZE filas para evitar
+// "Lambda error: Unhandled" (timeout / OOM / 6 MB payload sync limit).
+const EXPORT_CHUNK_SIZE = 20000;
+const EXPORT_MAX_CHUNKS = 30; // 600k filas máx — defensivo contra loops infinitos
 
 router.get("/:id/enrolled-users", async (req, res) => {
   const campaign = req.allowedCampaigns.find(({ id }) => id === req.params.id);
@@ -2057,7 +2111,7 @@ router.get("/:id/enrolled-users", async (req, res) => {
   }
 
   const range = parseDateRange(req.query);
-  const segment = normalizeSelectorValue(req.query.segment);
+  const segment = normalizeMultiSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
 
   try {
@@ -2066,10 +2120,10 @@ router.get("/:id/enrolled-users", async (req, res) => {
     const dateFilter = range
       ? `AND t.first_login BETWEEN '${range.from}' AND '${range.to} 23:59:59'`
       : "";
-    const segmentFilter = segment ? `AND u.segment = '${escapeStr(segment)}'` : "";
+    const segmentFilter = buildSegmentInClause(segment, "u.segment");
     const userTypeFilter = userType ? `AND u.${utCol} = '${escapeStr(userType)}'` : "";
 
-    const sql = `
+    const buildSql = (limit, offset) => `
       SELECT
         t.idmask,
         DATE_FORMAT(t.first_login, '%Y-%m-%d') AS fecha_inscripcion,
@@ -2086,14 +2140,24 @@ router.get("/:id/enrolled-users", async (req, res) => {
       ) t
       LEFT JOIN {db}.mc_users u ON u.idmask = t.idmask
       WHERE 1=1 ${dateFilter} ${segmentFilter} ${userTypeFilter}
-      ORDER BY t.first_login ASC, t.idmask ASC;
+      ORDER BY t.first_login ASC, t.idmask ASC
+      LIMIT ${limit} OFFSET ${offset};
     `;
 
-    const result = await runQuery(campaign.database, sql, []);
-    res.json({ rows: result.rows || [] });
+    const allRows = [];
+    for (let chunk = 0; chunk < EXPORT_MAX_CHUNKS; chunk += 1) {
+      const offset = chunk * EXPORT_CHUNK_SIZE;
+      const sql = buildSql(EXPORT_CHUNK_SIZE, offset);
+      const result = await runQuery(campaign.database, sql, []);
+      const rows = result.rows || [];
+      allRows.push(...rows);
+      if (rows.length < EXPORT_CHUNK_SIZE) break;
+    }
+
+    res.json({ rows: allRows });
   } catch (error) {
     console.error("[enrolled-users] Error", error);
-    res.status(500).json({ error: "No se pudo obtener los usuarios inscritos.", detail: error.message });
+    respondPendingOr500(res, error, { rows: [] }, "No se pudo obtener los usuarios inscritos.");
   }
 });
 
@@ -2107,7 +2171,7 @@ router.get("/:id/redeemed-users", async (req, res) => {
   }
 
   const range = parseDateRange(req.query);
-  const segment = normalizeSelectorValue(req.query.segment);
+  const segment = normalizeMultiSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
 
   try {
@@ -2116,14 +2180,15 @@ router.get("/:id/redeemed-users", async (req, res) => {
     const dateFilter = range
       ? `AND r.date BETWEEN '${range.from}' AND '${range.to} 23:59:59'`
       : "";
-    const segmentFilter = segment ? `AND u.segment = '${escapeStr(segment)}'` : "";
+    const segmentFilter = buildSegmentInClause(segment, "u.segment");
     const userTypeFilter = userType ? `AND u.${utCol} = '${escapeStr(userType)}'` : "";
 
-    const sql = `
+    const buildSql = (limit, offset) => `
       SELECT
         r.idmask,
         DATE_FORMAT(r.date, '%Y-%m-%d') AS fecha_redencion,
         r.value AS valor,
+        CASE r.block WHEN 1 THEN 'Win 1' WHEN 2 THEN 'Win 2' ELSE CONCAT('Win ', r.block) END AS win,
         COALESCE(u.segment, '') AS segmento,
         COALESCE(u.${utCol}, '') AS tipo_usuario
       FROM {db}.mc_redemptions r
@@ -2139,14 +2204,24 @@ router.get("/:id/redeemed-users", async (req, res) => {
         AND r.date IS NOT NULL
         AND r.date <> '0000-00-00 00:00:00'
         ${dateFilter} ${segmentFilter} ${userTypeFilter}
-      ORDER BY r.date ASC, r.idmask ASC;
+      ORDER BY r.date ASC, r.idmask ASC
+      LIMIT ${limit} OFFSET ${offset};
     `;
 
-    const result = await runQuery(campaign.database, sql, []);
-    res.json({ rows: result.rows || [] });
+    const allRows = [];
+    for (let chunk = 0; chunk < EXPORT_MAX_CHUNKS; chunk += 1) {
+      const offset = chunk * EXPORT_CHUNK_SIZE;
+      const sql = buildSql(EXPORT_CHUNK_SIZE, offset);
+      const result = await runQuery(campaign.database, sql, []);
+      const rows = result.rows || [];
+      allRows.push(...rows);
+      if (rows.length < EXPORT_CHUNK_SIZE) break;
+    }
+
+    res.json({ rows: allRows });
   } catch (error) {
     console.error("[redeemed-users] Error", error);
-    res.status(500).json({ error: "No se pudo obtener los usuarios redimidos.", detail: error.message });
+    respondPendingOr500(res, error, { rows: [] }, "No se pudo obtener los usuarios redimidos.");
   }
 });
 
@@ -2167,7 +2242,7 @@ router.get("/:id/redemptions-insights", async (req, res) => {
   const loginType = normalizeSelectorValue(req.query.loginType);
   const userId = normalizeSelectorValue(req.query.userId);
   const userIp = normalizeSelectorValue(req.query.userIp);
-  const segment = normalizeSelectorValue(req.query.segment);
+  const segment = normalizeMultiSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
   const userTypeColumn = campaign.userTypeColumn || "user_type";
 
@@ -2386,10 +2461,18 @@ router.get("/:id/redemptions-insights", async (req, res) => {
     });
   } catch (error) {
     console.error("[redemptions-insights] Error", error);
-    res.status(500).json({
-      error: "No se pudieron obtener las métricas de redenciones",
-      detail: error.message,
-    });
+    respondPendingOr500(
+      res,
+      error,
+      {
+        amountDistribution: [],
+        merchantPie: [],
+        merchantTotals: [],
+        merchantMatrix: { merchants: [], buckets: [], cells: [] },
+        heatmap: { cells: [], daysOfWeek: [], hours: [] },
+      },
+      "No se pudieron obtener las métricas de redenciones"
+    );
   }
 });
 
@@ -2953,7 +3036,7 @@ router.get("/:id/activity", async (req, res) => {
   const rawCampaignId = req.params.id;
   const range = parseDateRange(req.query);
   const loginType = normalizeSelectorValue(req.query.loginType);
-  const segment = normalizeSelectorValue(req.query.segment);
+  const segment = normalizeMultiSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
   const userId = normalizeSelectorValue(req.query.userId);
   const userIp = normalizeSelectorValue(req.query.userIp);
@@ -3232,10 +3315,19 @@ router.get("/:id/activity", async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error("[activity] Error", error);
-    res.status(500).json({
-      error: "No se pudo obtener la actividad temporal",
-      detail: error.message,
-    });
+    respondPendingOr500(
+      res,
+      error,
+      {
+        points: [],
+        totals: { totalLogins: 0, totalRedemptions: 0, totalRedeemedValue: 0 },
+        loginTypeBreakdown: [],
+        loginHeatmap: [],
+        annotations: [],
+        meta: { movingAverageWindow: MOVING_AVERAGE_WINDOW },
+      },
+      "No se pudo obtener la actividad temporal"
+    );
   }
 });
 
@@ -3411,7 +3503,7 @@ router.get("/:id/login-security", async (req, res) => {
   const loginType = normalizeSelectorValue(req.query.loginType);
   const userId = normalizeSelectorValue(req.query.userId);
   const userIp = normalizeSelectorValue(req.query.userIp);
-  const segment = normalizeSelectorValue(req.query.segment);
+  const segment = normalizeMultiSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
   const userTypeColumn = campaign.userTypeColumn || "user_type";
   const filters = { loginType, userId, userIp, segment, userType, userTypeColumn };
@@ -4124,10 +4216,19 @@ router.get("/:id/login-security", async (req, res) => {
     });
   } catch (error) {
     console.error("[login-security] Error", error);
-    res.status(500).json({
-      error: "No se pudo construir la vista de logins y seguridad",
-      detail: error.message,
-    });
+    respondPendingOr500(
+      res,
+      error,
+      {
+        topLoginIps: [],
+        topRedemptionIps: [],
+        loginIpDetails: [],
+        atypicalIps: [],
+        twoFactorAdoption: { entries: [], total: 0 },
+        metadata: { generatedAt: new Date().toISOString() },
+      },
+      "No se pudo construir la vista de logins y seguridad"
+    );
   }
 });
 

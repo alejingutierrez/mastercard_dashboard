@@ -21,6 +21,7 @@ export interface Campaign {
   features?: CampaignFeatures;
   baselineUsers?: number | null;
   enrollmentGoals?: EnrollmentGoal[] | null;
+  pendingDb?: boolean; // si true, la DB Aurora aún no existe — UI muestra banner
 }
 
 export interface Metric {

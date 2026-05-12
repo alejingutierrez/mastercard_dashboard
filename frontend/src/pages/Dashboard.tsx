@@ -242,7 +242,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   const [selectedCampaign, setSelectedCampaign] = useState<string>();
   const [loginType, setLoginType] = useState<string>();
   const [userTypeFilter, setUserTypeFilter] = useState<string>();
-  const [segmentoFilter, setSegmentoFilter] = useState<string>();
+  const [segmentoFilter, setSegmentoFilter] = useState<string[]>([]);
   const [userTypeOptions, setUserTypeOptions] = useState<string[]>([]);
   const [segmentOptions, setSegmentOptions] = useState<string[]>([]);
   const [userIdFilter, setUserIdFilter] = useState<string>();
@@ -431,6 +431,18 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   }, [campaigns, selectedCampaign]);
 
   const isTuya = selectedCampaignBank === "tuya";
+
+  // Campaña pre-aprovisionada cuya DB Aurora aún no existe.
+  // Cuando el backend detecta el error "Unknown database", responde con
+  // `pending: true` y aquí mostramos un banner amigable.
+  const selectedCampaignPending = useMemo<boolean>(() => {
+    if (!selectedCampaign) return false;
+    const c = campaigns.find((x) => x.id === selectedCampaign);
+    if (!c) return false;
+    if (c.pendingDb) return true;
+    // También consideramos pending si el summary devolvió `pending: true`
+    return Boolean((summary as unknown as { pending?: boolean })?.pending);
+  }, [campaigns, selectedCampaign, summary]);
 
   const menuItems = useMemo<MenuProps["items"]>(() => {
     const items: MenuProps["items"] = [
@@ -746,8 +758,10 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     if (userTypeFilter) {
       filters.userType = userTypeFilter;
     }
-    if (segmentoFilter) {
-      filters.segment = segmentoFilter;
+    if (segmentoFilter && segmentoFilter.length > 0) {
+      // Cuando es uno solo lo enviamos como string para no romper back-compat;
+      // multi se envía como array y el backend lo convierte en `IN (...)`.
+      filters.segment = segmentoFilter.length === 1 ? segmentoFilter[0] : segmentoFilter;
     }
     if (userIdFilter) {
       filters.userId = userIdFilter;
@@ -765,7 +779,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       dateRange ||
       loginType ||
       userTypeFilter ||
-      segmentoFilter ||
+      (segmentoFilter && segmentoFilter.length > 0) ||
       userIdFilter ||
       userIpFilter,
   );
@@ -832,7 +846,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     if (!selectedCampaign || selectedCampaign === "all") {
       setSegmentOptions([]);
       setUserTypeOptions([]);
-      setSegmentoFilter(undefined);
+      setSegmentoFilter([]);
       setUserTypeFilter(undefined);
       return;
     }
@@ -843,7 +857,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       .then((r) => setUserTypeOptions(r.userTypes))
       .catch(() => setUserTypeOptions([]));
     // Reset filters when campaign changes (values may differ)
-    setSegmentoFilter(undefined);
+    setSegmentoFilter([]);
     setUserTypeFilter(undefined);
   }, [selectedCampaign]);
 
@@ -1273,11 +1287,11 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       });
     }
 
-    if (segmentoFilter) {
+    if (segmentoFilter && segmentoFilter.length > 0) {
       tags.push({
         key: "segmento",
-        label: `Segmento: ${segmentoFilter}`,
-        onClose: () => setSegmentoFilter(undefined),
+        label: `Segmento: ${segmentoFilter.join(", ")}`,
+        onClose: () => setSegmentoFilter([]),
       });
     }
 
@@ -1617,12 +1631,43 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
             if (redeemedData.rows.length) {
               sheets.push({
                 name: "Usuarios Redimidos",
-                data: redeemedData.rows as unknown as Record<string, unknown>[],
+                data: redeemedData.rows.map((r) => ({
+                  idmask: r.idmask,
+                  fecha_redencion: r.fecha_redencion,
+                  valor: r.valor,
+                  redencion: r.win, // Win 1 / Win 2
+                  segmento: r.segmento,
+                  tipo_usuario: r.tipo_usuario,
+                })) as unknown as Record<string, unknown>[],
               });
             }
           }
         }
       } else if (selectedMenu === "redemptions") {
+        if (selectedCampaign && selectedCampaign !== "all") {
+          const exportFilters: Parameters<typeof fetchRedeemedUsers>[1] = {};
+          if (sharedQueryFilters.from && sharedQueryFilters.to) {
+            exportFilters.from = sharedQueryFilters.from;
+            exportFilters.to = sharedQueryFilters.to;
+          }
+          if (sharedQueryFilters.segment) exportFilters.segment = sharedQueryFilters.segment;
+          if (sharedQueryFilters.userType) exportFilters.userType = sharedQueryFilters.userType;
+
+          const redeemedData = await fetchRedeemedUsers(selectedCampaign, exportFilters);
+          if (redeemedData.rows.length) {
+            sheets.push({
+              name: "Detalle Redenciones",
+              data: redeemedData.rows.map((r) => ({
+                fecha: r.fecha_redencion,
+                idmask: r.idmask,
+                monto_redimido: r.valor,
+                redencion: r.win,
+                segmento: r.segmento,
+                tipo_usuario: r.tipo_usuario,
+              })) as unknown as Record<string, unknown>[],
+            });
+          }
+        }
         if (redemptionInsights?.amountDistribution?.length) {
           sheets.push({
             name: "Montos",
@@ -1718,8 +1763,28 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
 
       await exportExcel({ fileName, sheets });
     } catch (err) {
-      console.error(err);
-      message.error("No se pudo exportar el Excel.");
+      console.error("[export] fallo:", err);
+      // Duck-type: errores de axios traen .response y/o .code (ECONNABORTED en timeout)
+      // y errores nativos traen .message.
+      type MaybeAxiosErr = {
+        code?: string;
+        message?: string;
+        response?: { data?: { detail?: string; error?: string } };
+      };
+      const e = err as MaybeAxiosErr;
+      let detail: string;
+      if (e?.code === "ECONNABORTED") {
+        detail = "tiempo de espera agotado (el export es muy grande)";
+      } else if (e?.response?.data?.detail) {
+        detail = e.response.data.detail;
+      } else if (e?.response?.data?.error) {
+        detail = e.response.data.error;
+      } else if (e?.message) {
+        detail = e.message;
+      } else {
+        detail = String(err);
+      }
+      message.error(`No se pudo exportar el Excel: ${detail}`, 8);
     } finally {
       setExportingExcel(false);
     }
@@ -1742,7 +1807,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     setDateRange(null);
     setLoginType(undefined);
     setUserTypeFilter(undefined);
-    setSegmentoFilter(undefined);
+    setSegmentoFilter([]);
     setUserIdFilter(undefined);
     setUserIpFilter(undefined);
     setUserIdInput("");
@@ -2114,12 +2179,14 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                           Segmento de Usuario
                         </Text>
                         <Select
+                          mode="multiple"
                           allowClear
+                          maxTagCount="responsive"
                           placeholder="Todos los segmentos"
                           style={{ width: "100%" }}
-                          value={segmentoFilter ?? undefined}
+                          value={segmentoFilter}
                           options={segmentOptions.map((v) => ({ value: v, label: v }))}
-                          onChange={(value) => setSegmentoFilter(value ?? undefined)}
+                          onChange={(value) => setSegmentoFilter(Array.isArray(value) ? value : [])}
                           notFoundContent="Sin opciones para esta campaña"
                         />
                       </Space>
@@ -2342,7 +2409,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                                       formatter={() => (
                                         <span style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                                           <span>{formatValue(current, "number")}</span>
-                                          {pct !== null && !userTypeFilter && !segmentoFilter && (
+                                          {pct !== null && !userTypeFilter && segmentoFilter.length === 0 && (
                                             <Tag color={pct >= 0 ? "success" : "error"} style={{ marginLeft: 4 }}>
                                               {pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
                                             </Tag>
@@ -2397,6 +2464,20 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                   </Spin>
                 )}
 
+                {selectedCampaignPending && (
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                    message="Campaña en preparación"
+                    description={
+                      "La base de datos de esta campaña aún está siendo creada por el equipo. " +
+                      "Los KPIs, gráficas y exportaciones se mostrarán automáticamente cuando esté disponible. " +
+                      "No se requiere ningún cambio adicional."
+                    }
+                  />
+                )}
+
                 {mainSection}
 
                 {selectedMenu === "overview" && selectedCampaign && selectedCampaign !== "all" && (
@@ -2434,6 +2515,34 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                               ((a[seg.key] as number) || 0) - ((b[seg.key] as number) || 0),
                           })),
                         ]}
+                        summary={() => {
+                          if (!firstLogins || firstLogins.length === 0) return null;
+                          const totalLoggins = firstLogins.reduce(
+                            (acc, row) => acc + (Number(row.loggins_inscritos) || 0),
+                            0
+                          );
+                          const segmentTotals = firstLoginsSegments.map((seg) =>
+                            firstLogins.reduce(
+                              (acc, row) => acc + (Number(row[seg.key]) || 0),
+                              0
+                            )
+                          );
+                          return (
+                            <Table.Summary fixed>
+                              <Table.Summary.Row style={{ fontWeight: 600, background: "#fafafa" }}>
+                                <Table.Summary.Cell index={0}>Total</Table.Summary.Cell>
+                                <Table.Summary.Cell index={1} align="right">
+                                  {totalLoggins.toLocaleString("es-CO")}
+                                </Table.Summary.Cell>
+                                {segmentTotals.map((val, i) => (
+                                  <Table.Summary.Cell key={firstLoginsSegments[i].key} index={2 + i} align="right">
+                                    {val.toLocaleString("es-CO")}
+                                  </Table.Summary.Cell>
+                                ))}
+                              </Table.Summary.Row>
+                            </Table.Summary>
+                          );
+                        }}
                       />
                     </Card>
                   </Spin>
