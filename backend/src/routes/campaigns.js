@@ -28,9 +28,14 @@ const DEFAULT_TWO_FACTOR_TARGET = 0.7;
 router.use(requireAuth);
 
 router.use((req, res, next) => {
-  const rawAllowed =
-    Array.isArray(req.user?.allowedCampaignIds) &&
-    req.user.allowedCampaignIds.length > 0
+  // Los admin siempre ven todas las campañas, sin importar su allowedCampaignIds
+  // en S3 — así no hay que tocar S3 cada vez que se agregue una nueva campaña.
+  const isAdmin = req.user?.role === "admin";
+
+  const rawAllowed = isAdmin
+    ? CAMPAIGNS.map(({ id }) => id)
+    : Array.isArray(req.user?.allowedCampaignIds) &&
+      req.user.allowedCampaignIds.length > 0
       ? req.user.allowedCampaignIds
       : CAMPAIGNS.map(({ id }) => id);
 
