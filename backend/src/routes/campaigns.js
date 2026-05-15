@@ -2121,19 +2121,21 @@ router.get("/:id/enrolled-users", async (req, res) => {
 
   try {
     const utCol = (typeof campaign.userTypeColumn === "string" && campaign.userTypeColumn.length > 0 && campaign.userTypeColumn !== "undefined" && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(campaign.userTypeColumn)) ? campaign.userTypeColumn : "user_type";
+    const hasUserType = campaign.hasUserType !== false;
     const escapeStr = (s) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const dateFilter = range
       ? `AND t.first_login BETWEEN '${range.from}' AND '${range.to} 23:59:59'`
       : "";
     const segmentFilter = buildSegmentInClause(segment, "u.segment");
-    const userTypeFilter = userType ? `AND u.${utCol} = '${escapeStr(userType)}'` : "";
+    const userTypeFilter = hasUserType && userType ? `AND u.${utCol} = '${escapeStr(userType)}'` : "";
+    const tipoUsuarioSelect = hasUserType ? `COALESCE(u.${utCol}, '')` : `''`;
 
     const buildSql = (limit, offset) => `
       SELECT
         t.idmask,
         DATE_FORMAT(t.first_login, '%Y-%m-%d') AS fecha_inscripcion,
         COALESCE(u.segment, '') AS segmento,
-        COALESCE(u.${utCol}, '') AS tipo_usuario
+        ${tipoUsuarioSelect} AS tipo_usuario
       FROM (
         SELECT idmask, MIN(date) AS first_login
         FROM {db}.mc_logins
@@ -2181,12 +2183,14 @@ router.get("/:id/redeemed-users", async (req, res) => {
 
   try {
     const utCol = (typeof campaign.userTypeColumn === "string" && campaign.userTypeColumn.length > 0 && campaign.userTypeColumn !== "undefined" && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(campaign.userTypeColumn)) ? campaign.userTypeColumn : "user_type";
+    const hasUserType = campaign.hasUserType !== false;
     const escapeStr = (s) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const dateFilter = range
       ? `AND r.date BETWEEN '${range.from}' AND '${range.to} 23:59:59'`
       : "";
     const segmentFilter = buildSegmentInClause(segment, "u.segment");
-    const userTypeFilter = userType ? `AND u.${utCol} = '${escapeStr(userType)}'` : "";
+    const userTypeFilter = hasUserType && userType ? `AND u.${utCol} = '${escapeStr(userType)}'` : "";
+    const tipoUsuarioSelect = hasUserType ? `COALESCE(u.${utCol}, '')` : `''`;
 
     const buildSql = (limit, offset) => `
       SELECT
@@ -2195,7 +2199,7 @@ router.get("/:id/redeemed-users", async (req, res) => {
         r.value AS valor,
         CASE r.block WHEN 1 THEN 'Win 1' WHEN 2 THEN 'Win 2' ELSE CONCAT('Win ', r.block) END AS win,
         COALESCE(u.segment, '') AS segmento,
-        COALESCE(u.${utCol}, '') AS tipo_usuario
+        ${tipoUsuarioSelect} AS tipo_usuario
       FROM {db}.mc_redemptions r
       LEFT JOIN {db}.mc_users u ON u.idmask = r.idmask
       WHERE r.idmask IS NOT NULL

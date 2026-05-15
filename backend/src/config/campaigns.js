@@ -414,15 +414,15 @@ const CAMPAIGNS = [
     database: "dentsu_mastercard_avvillas_lista_para_ganar",
     bank: "avvillas",
     baselineUsers: null,
-    pendingDb: true, // banner UI; backend usa el match al error para auto-degradar
+    hasUserType: false,
     description:
       "Campaña AV Villas Lista Para Ganar. KPIs estándar de usuarios, logins y redenciones.",
     features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
-    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_trx_1, award_1
+    sampleSql: `SELECT idmask, segment, goal_amount_1, goal_trx_1, award_1
                 FROM {db}.mc_users
-                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                WHERE idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
                 LIMIT 50;`,
   },
   {
