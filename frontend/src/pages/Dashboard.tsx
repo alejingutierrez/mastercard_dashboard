@@ -60,8 +60,8 @@ import {
   fetchCampaignRedemptionInsights,
   fetchCampaignLoginSecurity,
   fetchFirstLoginsByDate,
-  fetchEnrolledUsers,
-  fetchRedeemedUsers,
+  fetchAllEnrolledUsers,
+  fetchAllRedeemedUsers,
   fetchCampaignSegments,
   fetchCampaignUserTypes,
   fetchEnrollmentFunnel,
@@ -1609,7 +1609,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           });
         }
         if (selectedCampaign && selectedCampaign !== "all") {
-          const exportFilters: Parameters<typeof fetchEnrolledUsers>[1] = {};
+          const exportFilters: Parameters<typeof fetchAllEnrolledUsers>[1] = {};
           if (sharedQueryFilters.from && sharedQueryFilters.to) {
             exportFilters.from = sharedQueryFilters.from;
             exportFilters.to = sharedQueryFilters.to;
@@ -1617,7 +1617,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           if (sharedQueryFilters.segment) exportFilters.segment = sharedQueryFilters.segment;
           if (sharedQueryFilters.userType) exportFilters.userType = sharedQueryFilters.userType;
 
-          const enrolledData = await fetchEnrolledUsers(selectedCampaign, exportFilters);
+          const enrolledData = await fetchAllEnrolledUsers(selectedCampaign, exportFilters);
           if (enrolledData.rows.length) {
             sheets.push({
               name: "Usuarios Inscritos",
@@ -1627,7 +1627,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
 
           const selectedCampaignObj = campaigns.find((c) => c.id === selectedCampaign);
           if (selectedCampaignObj?.bank === "davivienda") {
-            const redeemedData = await fetchRedeemedUsers(selectedCampaign, exportFilters);
+            const redeemedData = await fetchAllRedeemedUsers(selectedCampaign, exportFilters);
             if (redeemedData.rows.length) {
               sheets.push({
                 name: "Usuarios Redimidos",
@@ -1645,7 +1645,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         }
       } else if (selectedMenu === "redemptions") {
         if (selectedCampaign && selectedCampaign !== "all") {
-          const exportFilters: Parameters<typeof fetchRedeemedUsers>[1] = {};
+          const exportFilters: Parameters<typeof fetchAllRedeemedUsers>[1] = {};
           if (sharedQueryFilters.from && sharedQueryFilters.to) {
             exportFilters.from = sharedQueryFilters.from;
             exportFilters.to = sharedQueryFilters.to;
@@ -1653,7 +1653,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           if (sharedQueryFilters.segment) exportFilters.segment = sharedQueryFilters.segment;
           if (sharedQueryFilters.userType) exportFilters.userType = sharedQueryFilters.userType;
 
-          const redeemedData = await fetchRedeemedUsers(selectedCampaign, exportFilters);
+          const redeemedData = await fetchAllRedeemedUsers(selectedCampaign, exportFilters);
           if (redeemedData.rows.length) {
             sheets.push({
               name: "Detalle Redenciones",

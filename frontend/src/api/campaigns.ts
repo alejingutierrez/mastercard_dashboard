@@ -153,10 +153,28 @@ export const fetchFirstLoginsByDate = async (
   );
 };
 
+export type EnrolledUserRow = {
+  idmask: string;
+  fecha_inscripcion: string;
+  segmento: string;
+  tipo_usuario: string;
+};
+
+export type RedeemedUserRow = {
+  idmask: string;
+  fecha_redencion: string;
+  valor: number;
+  win: string;
+  segmento: string;
+  tipo_usuario: string;
+};
+
+type PaginationFilters = { limit?: number; offset?: number };
+
 export const fetchEnrolledUsers = async (
   campaignId: string,
-  filters?: Pick<SummaryFilters, "from" | "to" | "segment" | "userType">
-): Promise<{ rows: { idmask: string; fecha_inscripcion: string; segmento: string; tipo_usuario: string }[] }> => {
+  filters?: Pick<SummaryFilters, "from" | "to" | "segment" | "userType"> & PaginationFilters
+): Promise<{ rows: EnrolledUserRow[] }> => {
   return cachedGet(
     `/campaigns/${campaignId}/enrolled-users`,
     filters as Record<string, unknown> | undefined,
@@ -167,14 +185,68 @@ export const fetchEnrolledUsers = async (
 
 export const fetchRedeemedUsers = async (
   campaignId: string,
-  filters?: Pick<SummaryFilters, "from" | "to" | "segment" | "userType">
-): Promise<{ rows: { idmask: string; fecha_redencion: string; valor: number; win: string; segmento: string; tipo_usuario: string }[] }> => {
+  filters?: Pick<SummaryFilters, "from" | "to" | "segment" | "userType"> & PaginationFilters
+): Promise<{ rows: RedeemedUserRow[] }> => {
   return cachedGet(
     `/campaigns/${campaignId}/redeemed-users`,
     filters as Record<string, unknown> | undefined,
     0, // sin caché — siempre fresco al exportar
     { timeout: 120_000 } // 2 min: aunque suele ser pocas filas, evita aborts en casos extremos
   );
+};
+
+// Tamaño de página alineado con EXPORT_CHUNK_SIZE del backend.
+// Cada página pesa ~3 MB, muy por debajo del límite de 10 MB del API Gateway.
+const EXPORT_PAGE_SIZE = 20_000;
+const EXPORT_PAGE_HARD_CAP = 30; // 600k filas máx — defensa contra loops infinitos
+
+/**
+ * Itera páginas de /enrolled-users hasta vaciar el resultado. Cada página viaja
+ * por separado para no exceder el límite de 10 MB del API Gateway en el export Excel.
+ */
+export const fetchAllEnrolledUsers = async (
+  campaignId: string,
+  filters?: Pick<SummaryFilters, "from" | "to" | "segment" | "userType">,
+  onProgress?: (loaded: number) => void
+): Promise<{ rows: EnrolledUserRow[] }> => {
+  const rows: EnrolledUserRow[] = [];
+  for (let page = 0; page < EXPORT_PAGE_HARD_CAP; page += 1) {
+    const offset = page * EXPORT_PAGE_SIZE;
+    const result = await fetchEnrolledUsers(campaignId, {
+      ...filters,
+      limit: EXPORT_PAGE_SIZE,
+      offset,
+    });
+    const pageRows = result.rows || [];
+    rows.push(...pageRows);
+    onProgress?.(rows.length);
+    if (pageRows.length < EXPORT_PAGE_SIZE) break;
+  }
+  return { rows };
+};
+
+/**
+ * Itera páginas de /redeemed-users hasta vaciar el resultado.
+ */
+export const fetchAllRedeemedUsers = async (
+  campaignId: string,
+  filters?: Pick<SummaryFilters, "from" | "to" | "segment" | "userType">,
+  onProgress?: (loaded: number) => void
+): Promise<{ rows: RedeemedUserRow[] }> => {
+  const rows: RedeemedUserRow[] = [];
+  for (let page = 0; page < EXPORT_PAGE_HARD_CAP; page += 1) {
+    const offset = page * EXPORT_PAGE_SIZE;
+    const result = await fetchRedeemedUsers(campaignId, {
+      ...filters,
+      limit: EXPORT_PAGE_SIZE,
+      offset,
+    });
+    const pageRows = result.rows || [];
+    rows.push(...pageRows);
+    onProgress?.(rows.length);
+    if (pageRows.length < EXPORT_PAGE_SIZE) break;
+  }
+  return { rows };
 };
 
 export const fetchCampaignSegments = async (

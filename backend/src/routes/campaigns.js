@@ -2119,6 +2119,17 @@ router.get("/:id/enrolled-users", async (req, res) => {
   const segment = normalizeMultiSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
 
+  // Paginación opcional: si el cliente pasa ?limit y ?offset, se devuelve UNA sola página
+  // (para que el export Excel no genere un JSON > 10 MB que el API Gateway rechace con 413).
+  // Si no pasa esos params, se mantiene el comportamiento histórico (acumular todo internamente).
+  const reqLimit = Number.parseInt(req.query.limit, 10);
+  const reqOffset = Number.parseInt(req.query.offset, 10);
+  const paginated =
+    Number.isFinite(reqLimit) && reqLimit > 0 &&
+    Number.isFinite(reqOffset) && reqOffset >= 0;
+  const pageLimit = paginated ? Math.min(reqLimit, EXPORT_CHUNK_SIZE) : null;
+  const pageOffset = paginated ? reqOffset : null;
+
   try {
     const utCol = (typeof campaign.userTypeColumn === "string" && campaign.userTypeColumn.length > 0 && campaign.userTypeColumn !== "undefined" && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(campaign.userTypeColumn)) ? campaign.userTypeColumn : "user_type";
     const hasUserType = campaign.hasUserType !== false;
@@ -2151,6 +2162,12 @@ router.get("/:id/enrolled-users", async (req, res) => {
       LIMIT ${limit} OFFSET ${offset};
     `;
 
+    if (paginated) {
+      const sql = buildSql(pageLimit, pageOffset);
+      const result = await runQuery(campaign.database, sql, []);
+      return res.json({ rows: result.rows || [] });
+    }
+
     const allRows = [];
     for (let chunk = 0; chunk < EXPORT_MAX_CHUNKS; chunk += 1) {
       const offset = chunk * EXPORT_CHUNK_SIZE;
@@ -2180,6 +2197,16 @@ router.get("/:id/redeemed-users", async (req, res) => {
   const range = parseDateRange(req.query);
   const segment = normalizeMultiSelectorValue(req.query.segment);
   const userType = normalizeSelectorValue(req.query.userType);
+
+  // Paginación opcional (mismo patrón que /enrolled-users): si el cliente pasa
+  // ?limit y ?offset, se devuelve UNA sola página para evitar 413 en API Gateway.
+  const reqLimit = Number.parseInt(req.query.limit, 10);
+  const reqOffset = Number.parseInt(req.query.offset, 10);
+  const paginated =
+    Number.isFinite(reqLimit) && reqLimit > 0 &&
+    Number.isFinite(reqOffset) && reqOffset >= 0;
+  const pageLimit = paginated ? Math.min(reqLimit, EXPORT_CHUNK_SIZE) : null;
+  const pageOffset = paginated ? reqOffset : null;
 
   try {
     const utCol = (typeof campaign.userTypeColumn === "string" && campaign.userTypeColumn.length > 0 && campaign.userTypeColumn !== "undefined" && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(campaign.userTypeColumn)) ? campaign.userTypeColumn : "user_type";
@@ -2216,6 +2243,12 @@ router.get("/:id/redeemed-users", async (req, res) => {
       ORDER BY r.date ASC, r.idmask ASC
       LIMIT ${limit} OFFSET ${offset};
     `;
+
+    if (paginated) {
+      const sql = buildSql(pageLimit, pageOffset);
+      const result = await runQuery(campaign.database, sql, []);
+      return res.json({ rows: result.rows || [] });
+    }
 
     const allRows = [];
     for (let chunk = 0; chunk < EXPORT_MAX_CHUNKS; chunk += 1) {
