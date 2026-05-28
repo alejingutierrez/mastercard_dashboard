@@ -1543,6 +1543,18 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   );
 
   const handleExportCurrentView = async () => {
+    const PROGRESS_KEY = "export-progress";
+    const showProgress = (label: string, loaded?: number) => {
+      const content = typeof loaded === "number"
+        ? `${label}: ${loaded.toLocaleString("es-CO")} filas...`
+        : label;
+      message.loading({ content, key: PROGRESS_KEY, duration: 0 });
+    };
+    const onEnrolledProgress = (loaded: number) =>
+      showProgress("Cargando usuarios inscritos", loaded);
+    const onRedeemedProgress = (loaded: number) =>
+      showProgress("Cargando usuarios redimidos", loaded);
+
     try {
       setExportingExcel(true);
 
@@ -1617,7 +1629,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           if (sharedQueryFilters.segment) exportFilters.segment = sharedQueryFilters.segment;
           if (sharedQueryFilters.userType) exportFilters.userType = sharedQueryFilters.userType;
 
-          const enrolledData = await fetchAllEnrolledUsers(selectedCampaign, exportFilters);
+          const enrolledData = await fetchAllEnrolledUsers(selectedCampaign, exportFilters, onEnrolledProgress);
           if (enrolledData.rows.length) {
             sheets.push({
               name: "Usuarios Inscritos",
@@ -1627,7 +1639,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
 
           const selectedCampaignObj = campaigns.find((c) => c.id === selectedCampaign);
           if (selectedCampaignObj?.bank === "davivienda") {
-            const redeemedData = await fetchAllRedeemedUsers(selectedCampaign, exportFilters);
+            const redeemedData = await fetchAllRedeemedUsers(selectedCampaign, exportFilters, onRedeemedProgress);
             if (redeemedData.rows.length) {
               sheets.push({
                 name: "Usuarios Redimidos",
@@ -1653,7 +1665,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           if (sharedQueryFilters.segment) exportFilters.segment = sharedQueryFilters.segment;
           if (sharedQueryFilters.userType) exportFilters.userType = sharedQueryFilters.userType;
 
-          const redeemedData = await fetchAllRedeemedUsers(selectedCampaign, exportFilters);
+          const redeemedData = await fetchAllRedeemedUsers(selectedCampaign, exportFilters, onRedeemedProgress);
           if (redeemedData.rows.length) {
             sheets.push({
               name: "Detalle Redenciones",
@@ -1761,7 +1773,9 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
         return;
       }
 
+      showProgress("Generando archivo Excel...");
       await exportExcel({ fileName, sheets });
+      message.success({ content: "Excel descargado", key: PROGRESS_KEY, duration: 2 });
     } catch (err) {
       console.error("[export] fallo:", err);
       // Duck-type: errores de axios traen .response y/o .code (ECONNABORTED en timeout)
@@ -1784,7 +1798,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       } else {
         detail = String(err);
       }
-      message.error(`No se pudo exportar el Excel: ${detail}`, 8);
+      message.error({ content: `No se pudo exportar el Excel: ${detail}`, key: PROGRESS_KEY, duration: 8 });
     } finally {
       setExportingExcel(false);
     }
