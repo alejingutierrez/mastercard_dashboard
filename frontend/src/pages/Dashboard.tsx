@@ -1637,22 +1637,23 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
             });
           }
 
-          const selectedCampaignObj = campaigns.find((c) => c.id === selectedCampaign);
-          if (selectedCampaignObj?.bank === "davivienda") {
-            const redeemedData = await fetchAllRedeemedUsers(selectedCampaign, exportFilters, onRedeemedProgress);
-            if (redeemedData.rows.length) {
-              sheets.push({
-                name: "Usuarios Redimidos",
-                data: redeemedData.rows.map((r) => ({
-                  idmask: r.idmask,
-                  fecha_redencion: r.fecha_redencion,
-                  valor: r.valor,
-                  redencion: r.win, // Win 1 / Win 2
-                  segmento: r.segmento,
-                  tipo_usuario: r.tipo_usuario,
-                })) as unknown as Record<string, unknown>[],
-              });
-            }
+          // Usuarios Redimidos: exportar para todas las campañas que tengan redenciones.
+          // (Antes el gate era `bank === "davivienda"`; se removió para incluir AV Villas
+          //  y cualquier otro banco que registre redenciones. Si la campaña no tiene
+          //  redenciones, redeemedData.rows.length === 0 y la hoja simplemente se omite.)
+          const redeemedData = await fetchAllRedeemedUsers(selectedCampaign, exportFilters, onRedeemedProgress);
+          if (redeemedData.rows.length) {
+            sheets.push({
+              name: "Usuarios Redimidos",
+              data: redeemedData.rows.map((r) => ({
+                idmask: r.idmask,
+                fecha_redencion: r.fecha_redencion,
+                valor: r.valor,
+                redencion: r.win, // Win 1 / Win 2
+                segmento: r.segmento,
+                tipo_usuario: r.tipo_usuario,
+              })) as unknown as Record<string, unknown>[],
+            });
           }
         }
       } else if (selectedMenu === "redemptions") {
