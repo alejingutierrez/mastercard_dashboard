@@ -62,6 +62,7 @@ import {
   fetchFirstLoginsByDate,
   fetchAllEnrolledUsers,
   fetchAllRedeemedUsers,
+  fetchAllRechallengeUsers,
   fetchCampaignSegments,
   fetchCampaignUserTypes,
   fetchEnrollmentFunnel,
@@ -1629,11 +1630,23 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           if (sharedQueryFilters.segment) exportFilters.segment = sharedQueryFilters.segment;
           if (sharedQueryFilters.userType) exportFilters.userType = sharedQueryFilters.userType;
 
+          // Si la campaña no maneja user_type (ej. AV Villas), omitimos esa columna del export.
+          const campaignInfo = campaigns.find((c) => c.id === selectedCampaign);
+          const includeUserType = campaignInfo?.hasUserType !== false;
+
           const enrolledData = await fetchAllEnrolledUsers(selectedCampaign, exportFilters, onEnrolledProgress);
           if (enrolledData.rows.length) {
             sheets.push({
               name: "Usuarios Inscritos",
-              data: enrolledData.rows as unknown as Record<string, unknown>[],
+              data: enrolledData.rows.map((r) => {
+                const row: Record<string, unknown> = {
+                  idmask: r.idmask,
+                  fecha_inscripcion: r.fecha_inscripcion,
+                  segmento: r.segmento,
+                };
+                if (includeUserType) row.tipo_usuario = r.tipo_usuario;
+                return row;
+              }) as Record<string, unknown>[],
             });
           }
 
@@ -1645,15 +1658,37 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           if (redeemedData.rows.length) {
             sheets.push({
               name: "Usuarios Redimidos",
-              data: redeemedData.rows.map((r) => ({
-                idmask: r.idmask,
-                fecha_redencion: r.fecha_redencion,
-                valor: r.valor,
-                redencion: r.win, // Win 1 / Win 2
-                segmento: r.segmento,
-                tipo_usuario: r.tipo_usuario,
-              })) as unknown as Record<string, unknown>[],
+              data: redeemedData.rows.map((r) => {
+                const row: Record<string, unknown> = {
+                  idmask: r.idmask,
+                  fecha_redencion: r.fecha_redencion,
+                  valor: r.valor,
+                  redencion: r.win, // Win 1 / Win 2
+                  segmento: r.segmento,
+                };
+                if (includeUserType) row.tipo_usuario = r.tipo_usuario;
+                return row;
+              }) as Record<string, unknown>[],
             });
+          }
+
+          // Reto Meta 2: usuarios que ganaron meta 1 y eligieron retarse a la siguiente.
+          // Solo aplica a campañas con `hasReChallenge: true` (AV Villas).
+          // Query: SELECT idmask FROM mc_tracings WHERE is_Level_2 = 1 AND idmask NOT IN (...)
+          if (campaignInfo?.hasReChallenge) {
+            const reChData = await fetchAllRechallengeUsers(selectedCampaign, (loaded) => {
+              message.loading({
+                content: `Cargando usuarios reto meta 2: ${loaded.toLocaleString("es-CO")} filas...`,
+                key: "export-progress",
+                duration: 0,
+              });
+            });
+            if (reChData.rows.length) {
+              sheets.push({
+                name: "Reto Meta 2",
+                data: reChData.rows.map((r) => ({ idmask: r.idmask })) as Record<string, unknown>[],
+              });
+            }
           }
         }
       } else if (selectedMenu === "redemptions") {
@@ -1666,18 +1701,24 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           if (sharedQueryFilters.segment) exportFilters.segment = sharedQueryFilters.segment;
           if (sharedQueryFilters.userType) exportFilters.userType = sharedQueryFilters.userType;
 
+          const campaignInfo = campaigns.find((c) => c.id === selectedCampaign);
+          const includeUserType = campaignInfo?.hasUserType !== false;
+
           const redeemedData = await fetchAllRedeemedUsers(selectedCampaign, exportFilters, onRedeemedProgress);
           if (redeemedData.rows.length) {
             sheets.push({
               name: "Detalle Redenciones",
-              data: redeemedData.rows.map((r) => ({
-                fecha: r.fecha_redencion,
-                idmask: r.idmask,
-                monto_redimido: r.valor,
-                redencion: r.win,
-                segmento: r.segmento,
-                tipo_usuario: r.tipo_usuario,
-              })) as unknown as Record<string, unknown>[],
+              data: redeemedData.rows.map((r) => {
+                const row: Record<string, unknown> = {
+                  fecha: r.fecha_redencion,
+                  idmask: r.idmask,
+                  monto_redimido: r.valor,
+                  redencion: r.win,
+                  segmento: r.segmento,
+                };
+                if (includeUserType) row.tipo_usuario = r.tipo_usuario;
+                return row;
+              }) as Record<string, unknown>[],
             });
           }
         }

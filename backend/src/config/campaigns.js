@@ -415,6 +415,7 @@ const CAMPAIGNS = [
     bank: "avvillas",
     baselineUsers: null,
     hasUserType: false,
+    hasReChallenge: true, // mc_tracings.is_Level_2 = 1 marca usuarios que eligen retarse a la meta 2
     description:
       "Campaña AV Villas Lista Para Ganar. KPIs estándar de usuarios, logins y redenciones.",
     features: {},

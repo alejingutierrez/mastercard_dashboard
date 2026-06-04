@@ -249,6 +249,46 @@ export const fetchAllRedeemedUsers = async (
   return { rows };
 };
 
+// Solo idmask — semántica acordada con cliente (AV Villas).
+export type RechallengeUserRow = {
+  idmask: string;
+};
+
+export const fetchRechallengeUsers = async (
+  campaignId: string,
+  filters?: PaginationFilters
+): Promise<{ rows: RechallengeUserRow[] }> => {
+  return cachedGet(
+    `/campaigns/${campaignId}/rechallenge-users`,
+    filters as Record<string, unknown> | undefined,
+    0,
+    { timeout: 120_000 }
+  );
+};
+
+/**
+ * Itera páginas de /rechallenge-users hasta vaciar el resultado.
+ * Usuarios que eligieron retarse a la próxima meta (AV Villas).
+ */
+export const fetchAllRechallengeUsers = async (
+  campaignId: string,
+  onProgress?: (loaded: number) => void
+): Promise<{ rows: RechallengeUserRow[] }> => {
+  const rows: RechallengeUserRow[] = [];
+  for (let page = 0; page < EXPORT_PAGE_HARD_CAP; page += 1) {
+    const offset = page * EXPORT_PAGE_SIZE;
+    const result = await fetchRechallengeUsers(campaignId, {
+      limit: EXPORT_PAGE_SIZE,
+      offset,
+    });
+    const pageRows = result.rows || [];
+    rows.push(...pageRows);
+    onProgress?.(rows.length);
+    if (pageRows.length < EXPORT_PAGE_SIZE) break;
+  }
+  return { rows };
+};
+
 export const fetchCampaignSegments = async (
   campaignId: string
 ): Promise<{ segments: string[] }> => {

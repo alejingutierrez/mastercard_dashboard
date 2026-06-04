@@ -54,7 +54,7 @@ router.use((req, res, next) => {
 });
 
 router.get("/", (req, res) => {
-  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description, bank, userTypeColumn, firstLoginsPivotColumn, features, baselineUsers, enrollmentGoals, pendingDb }) => ({
+  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description, bank, userTypeColumn, firstLoginsPivotColumn, features, baselineUsers, enrollmentGoals, pendingDb, hasUserType, hasReChallenge }) => ({
     id,
     name,
     description,
@@ -65,6 +65,8 @@ router.get("/", (req, res) => {
     baselineUsers: baselineUsers ?? null,
     enrollmentGoals: enrollmentGoals ?? null,
     pendingDb: Boolean(pendingDb),
+    hasUserType: hasUserType !== false, // default true; AV Villas lo pone false
+    hasReChallenge: Boolean(hasReChallenge),
   }));
 
   res.json(liteCampaigns);
@@ -2264,6 +2266,61 @@ router.get("/:id/redeemed-users", async (req, res) => {
   } catch (error) {
     console.error("[redeemed-users] Error", error);
     respondPendingOr500(res, error, { rows: [] }, "No se pudo obtener los usuarios redimidos.");
+  }
+});
+
+// Usuarios que eligen retarse a la próxima meta (AV Villas y campañas similares).
+// Lee de mc_tracings.is_Level_2 = 1. Requiere `hasReChallenge: true` en config.
+router.get("/:id/rechallenge-users", async (req, res) => {
+  const campaign = req.allowedCampaigns.find(({ id }) => id === req.params.id);
+  if (!campaign) {
+    const isKnownCampaign = Boolean(getCampaignById(req.params.id));
+    return res.status(isKnownCampaign ? 403 : 404).json({
+      error: isKnownCampaign ? "No tienes acceso a esta campaña." : "Campaña no encontrada",
+    });
+  }
+
+  if (!campaign.hasReChallenge) {
+    // La campaña no maneja mecánica de re-reto → devolver vacío en lugar de error
+    return res.json({ rows: [] });
+  }
+
+  const pageLimit = Math.min(Number(req.query.limit) || EXPORT_CHUNK_SIZE, EXPORT_CHUNK_SIZE);
+  const pageOffset = Math.max(Number(req.query.offset) || 0, 0);
+  const paginated = req.query.limit !== undefined || req.query.offset !== undefined;
+
+  try {
+    // Query exacta acordada con cliente (AV Villas):
+    //   SELECT idmask FROM mc_tracings WHERE is_Level_2 = 1 AND idmask NOT IN (...)
+    const buildSql = (limit, offset) => `
+      SELECT idmask
+      FROM {db}.mc_tracings
+      WHERE is_Level_2 = 1
+        AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+      ORDER BY idmask ASC
+      LIMIT ${limit} OFFSET ${offset};
+    `;
+
+    if (paginated) {
+      const sql = buildSql(pageLimit, pageOffset);
+      const result = await runQuery(campaign.database, sql, []);
+      return res.json({ rows: result.rows || [] });
+    }
+
+    const allRows = [];
+    for (let chunk = 0; chunk < EXPORT_MAX_CHUNKS; chunk += 1) {
+      const offset = chunk * EXPORT_CHUNK_SIZE;
+      const sql = buildSql(EXPORT_CHUNK_SIZE, offset);
+      const result = await runQuery(campaign.database, sql, []);
+      const rows = result.rows || [];
+      allRows.push(...rows);
+      if (rows.length < EXPORT_CHUNK_SIZE) break;
+    }
+
+    res.json({ rows: allRows });
+  } catch (error) {
+    console.error("[rechallenge-users] Error", error);
+    respondPendingOr500(res, error, { rows: [] }, "No se pudo obtener los usuarios que se retan a la próxima meta.");
   }
 });
 

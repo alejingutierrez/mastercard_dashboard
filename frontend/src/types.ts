@@ -22,6 +22,8 @@ export interface Campaign {
   baselineUsers?: number | null;
   enrollmentGoals?: EnrollmentGoal[] | null;
   pendingDb?: boolean; // si true, la DB Aurora aún no existe — UI muestra banner
+  hasUserType?: boolean; // false en AV Villas (mc_users.user_type no existe)
+  hasReChallenge?: boolean; // true si la campaña tiene mc_tracings.is_Level_2 (AV Villas)
 }
 
 export interface Metric {
