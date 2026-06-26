@@ -63,6 +63,7 @@ import {
   fetchAllEnrolledUsers,
   fetchAllRedeemedUsers,
   fetchAllRechallengeUsers,
+  fetchAllLoginPerformance,
   fetchCampaignSegments,
   fetchCampaignUserTypes,
   fetchEnrollmentFunnel,
@@ -1645,6 +1646,11 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                   segmento: r.segmento,
                 };
                 if (includeUserType) row.tipo_usuario = r.tipo_usuario;
+                // Conteos por type. total_intentos al final por convención.
+                row.logins_exitosos = r.logins_exitosos;
+                row.autologins = r.autologins;
+                row.logins_fallidos = r.logins_fallidos;
+                row.total_intentos = r.total_intentos;
                 return row;
               }) as Record<string, unknown>[],
             });
@@ -1689,6 +1695,31 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                 data: reChData.rows.map((r) => ({ idmask: r.idmask })) as Record<string, unknown>[],
               });
             }
+          }
+
+          // Performance Loggin: idmask + fecha de TODOS los logins.
+          // Aplica a todas las campañas de todos los bancos sin excepción.
+          // Respeta el rango de fechas activo en los filtros del dashboard.
+          const perfFilters: Parameters<typeof fetchAllLoginPerformance>[1] = {};
+          if (sharedQueryFilters.from && sharedQueryFilters.to) {
+            perfFilters.from = sharedQueryFilters.from;
+            perfFilters.to = sharedQueryFilters.to;
+          }
+          const perfData = await fetchAllLoginPerformance(selectedCampaign, perfFilters, (loaded) => {
+            message.loading({
+              content: `Cargando performance de logins: ${loaded.toLocaleString("es-CO")} filas...`,
+              key: "export-progress",
+              duration: 0,
+            });
+          });
+          if (perfData.rows.length) {
+            sheets.push({
+              name: "Performance Loggin",
+              data: perfData.rows.map((r) => ({
+                idmask: r.idmask,
+                fecha: r.fecha,
+              })) as Record<string, unknown>[],
+            });
           }
         }
       } else if (selectedMenu === "redemptions") {

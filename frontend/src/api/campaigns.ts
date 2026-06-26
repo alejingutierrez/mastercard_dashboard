@@ -158,6 +158,10 @@ export type EnrolledUserRow = {
   fecha_inscripcion: string;
   segmento: string;
   tipo_usuario: string;
+  logins_exitosos: number;
+  autologins: number;
+  logins_fallidos: number;
+  total_intentos: number;
 };
 
 export type RedeemedUserRow = {
@@ -237,6 +241,45 @@ export const fetchAllRedeemedUsers = async (
   for (let page = 0; page < EXPORT_PAGE_HARD_CAP; page += 1) {
     const offset = page * EXPORT_PAGE_SIZE;
     const result = await fetchRedeemedUsers(campaignId, {
+      ...filters,
+      limit: EXPORT_PAGE_SIZE,
+      offset,
+    });
+    const pageRows = result.rows || [];
+    rows.push(...pageRows);
+    onProgress?.(rows.length);
+    if (pageRows.length < EXPORT_PAGE_SIZE) break;
+  }
+  return { rows };
+};
+
+// Performance Loggin: idmask + fecha de TODOS los logins. Aplica a todas las campañas.
+export type LoginPerformanceRow = {
+  idmask: string;
+  fecha: string;
+};
+
+export const fetchLoginPerformance = async (
+  campaignId: string,
+  filters?: Pick<SummaryFilters, "from" | "to"> & PaginationFilters
+): Promise<{ rows: LoginPerformanceRow[] }> => {
+  return cachedGet(
+    `/campaigns/${campaignId}/login-performance`,
+    filters as Record<string, unknown> | undefined,
+    0,
+    { timeout: 120_000 }
+  );
+};
+
+export const fetchAllLoginPerformance = async (
+  campaignId: string,
+  filters?: Pick<SummaryFilters, "from" | "to">,
+  onProgress?: (loaded: number) => void
+): Promise<{ rows: LoginPerformanceRow[] }> => {
+  const rows: LoginPerformanceRow[] = [];
+  for (let page = 0; page < EXPORT_PAGE_HARD_CAP; page += 1) {
+    const offset = page * EXPORT_PAGE_SIZE;
+    const result = await fetchLoginPerformance(campaignId, {
       ...filters,
       limit: EXPORT_PAGE_SIZE,
       offset,

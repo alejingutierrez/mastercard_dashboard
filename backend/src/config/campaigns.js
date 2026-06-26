@@ -137,6 +137,23 @@ const COMMON_METRICS = [
     baseTable: "mc_logins",
     hidden: true,
   },
+  {
+    // Usuarios con >1 login válido (type IN (1,2)). Solo aparece en la hoja KPIs
+    // del Excel — no se renderiza como tarjeta en el dashboard.
+    key: "usersMultipleLogins",
+    label: "Usuarios con más de un login",
+    sql: `SELECT COUNT(*) AS value FROM (
+            SELECT idmask
+            FROM {db}.mc_logins
+            WHERE (idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL})
+              AND type IN (1, 2)
+            GROUP BY idmask
+            HAVING COUNT(*) > 1
+          ) t`,
+    dateColumn: "{db}.mc_logins.date",
+    baseTable: "mc_logins",
+    hidden: true,
+  },
 ];
 
 const COMMON_CHARTS = [

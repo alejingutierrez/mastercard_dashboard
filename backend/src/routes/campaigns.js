@@ -2143,20 +2143,34 @@ router.get("/:id/enrolled-users", async (req, res) => {
     const userTypeFilter = hasUserType && userType ? `AND u.${utCol} = '${escapeStr(userType)}'` : "";
     const tipoUsuarioSelect = hasUserType ? `COALESCE(u.${utCol}, '')` : `''`;
 
+    // El subquery agrega todos los logins (type 0, 1, 2) por idmask para poder
+    // contar exitosos / autologins / fallidos / totales. Usa MIN(IF(...)) para
+    // calcular el primer login válido (type IN (1,2)) — los idmasks que nunca
+    // tuvieron login válido se filtran con HAVING first_login IS NOT NULL.
     const buildSql = (limit, offset) => `
       SELECT
         t.idmask,
         DATE_FORMAT(t.first_login, '%Y-%m-%d') AS fecha_inscripcion,
         COALESCE(u.segment, '') AS segmento,
-        ${tipoUsuarioSelect} AS tipo_usuario
+        ${tipoUsuarioSelect} AS tipo_usuario,
+        t.logins_exitosos,
+        t.autologins,
+        t.logins_fallidos,
+        t.total_intentos
       FROM (
-        SELECT idmask, MIN(date) AS first_login
+        SELECT
+          idmask,
+          MIN(IF(type IN (1,2), date, NULL)) AS first_login,
+          SUM(CASE WHEN type = 1 THEN 1 ELSE 0 END) AS logins_exitosos,
+          SUM(CASE WHEN type = 2 THEN 1 ELSE 0 END) AS autologins,
+          SUM(CASE WHEN type = 0 THEN 1 ELSE 0 END) AS logins_fallidos,
+          COUNT(*) AS total_intentos
         FROM {db}.mc_logins
         WHERE idmask IS NOT NULL
           AND TRIM(idmask) <> ''
           AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
-          AND type IN (1, 2)
         GROUP BY idmask
+        HAVING first_login IS NOT NULL
       ) t
       LEFT JOIN {db}.mc_users u ON u.idmask = t.idmask
       WHERE 1=1 ${dateFilter} ${segmentFilter} ${userTypeFilter}
@@ -2184,6 +2198,66 @@ router.get("/:id/enrolled-users", async (req, res) => {
   } catch (error) {
     console.error("[enrolled-users] Error", error);
     respondPendingOr500(res, error, { rows: [] }, "No se pudo obtener los usuarios inscritos.");
+  }
+});
+
+// Performance Loggin: idmask + fecha de todos los logins (type 0, 1 y 2).
+// Aplica a todas las campañas de todos los bancos. Soporta chunking idéntico
+// al de enrolled-users (limit/offset desde el cliente o loop interno).
+router.get("/:id/login-performance", async (req, res) => {
+  const campaign = req.allowedCampaigns.find(({ id }) => id === req.params.id);
+  if (!campaign) {
+    const isKnownCampaign = Boolean(getCampaignById(req.params.id));
+    return res.status(isKnownCampaign ? 403 : 404).json({
+      error: isKnownCampaign ? "No tienes acceso a esta campaña." : "Campaña no encontrada",
+    });
+  }
+
+  const range = parseDateRange(req.query);
+  const pageLimit = Math.min(Number(req.query.limit) || EXPORT_CHUNK_SIZE, EXPORT_CHUNK_SIZE);
+  const pageOffset = Math.max(Number(req.query.offset) || 0, 0);
+  const paginated = req.query.limit !== undefined || req.query.offset !== undefined;
+
+  try {
+    const dateFilter = range
+      ? `AND date BETWEEN '${range.from}' AND '${range.to} 23:59:59'`
+      : "";
+
+    const buildSql = (limit, offset) => `
+      SELECT
+        idmask,
+        DATE_FORMAT(date, '%Y-%m-%d %H:%i:%s') AS fecha
+      FROM {db}.mc_logins
+      WHERE idmask IS NOT NULL
+        AND TRIM(idmask) <> ''
+        AND idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+        AND date IS NOT NULL
+        AND date <> '0000-00-00 00:00:00'
+        ${dateFilter}
+      ORDER BY date ASC, idmask ASC
+      LIMIT ${limit} OFFSET ${offset};
+    `;
+
+    if (paginated) {
+      const sql = buildSql(pageLimit, pageOffset);
+      const result = await runQuery(campaign.database, sql, []);
+      return res.json({ rows: result.rows || [] });
+    }
+
+    const allRows = [];
+    for (let chunk = 0; chunk < EXPORT_MAX_CHUNKS; chunk += 1) {
+      const offset = chunk * EXPORT_CHUNK_SIZE;
+      const sql = buildSql(EXPORT_CHUNK_SIZE, offset);
+      const result = await runQuery(campaign.database, sql, []);
+      const rows = result.rows || [];
+      allRows.push(...rows);
+      if (rows.length < EXPORT_CHUNK_SIZE) break;
+    }
+
+    res.json({ rows: allRows });
+  } catch (error) {
+    console.error("[login-performance] Error", error);
+    respondPendingOr500(res, error, { rows: [] }, "No se pudo obtener el performance de logins.");
   }
 });
 
