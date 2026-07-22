@@ -2301,10 +2301,12 @@ router.get("/:id/redeemed-users", async (req, res) => {
         DATE_FORMAT(r.date, '%Y-%m-%d') AS fecha_redencion,
         r.value AS valor,
         CASE r.block WHEN 1 THEN 'Win 1' WHEN 2 THEN 'Win 2' ELSE CONCAT('Win ', r.block) END AS win,
+        ${MERCHANT_NAME_EXPRESSION} AS comercio,
         COALESCE(u.segment, '') AS segmento,
         ${tipoUsuarioSelect} AS tipo_usuario
       FROM {db}.mc_redemptions r
       LEFT JOIN {db}.mc_users u ON u.idmask = r.idmask
+      LEFT JOIN {db}.mc_awards a ON a.id = r.id_award
       WHERE r.idmask IS NOT NULL
         AND TRIM(r.idmask) <> ''
         AND r.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}

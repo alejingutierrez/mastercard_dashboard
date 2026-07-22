@@ -169,6 +169,7 @@ export type RedeemedUserRow = {
   fecha_redencion: string;
   valor: number;
   win: string;
+  comercio: string;
   segmento: string;
   tipo_usuario: string;
 };

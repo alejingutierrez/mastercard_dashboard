@@ -1670,6 +1670,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                   fecha_redencion: r.fecha_redencion,
                   valor: r.valor,
                   redencion: r.win, // Win 1 / Win 2
+                  comercio: r.comercio,
                   segmento: r.segmento,
                 };
                 if (includeUserType) row.tipo_usuario = r.tipo_usuario;
@@ -1745,6 +1746,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                   idmask: r.idmask,
                   monto_redimido: r.valor,
                   redencion: r.win,
+                  comercio: r.comercio,
                   segmento: r.segmento,
                 };
                 if (includeUserType) row.tipo_usuario = r.tipo_usuario;
