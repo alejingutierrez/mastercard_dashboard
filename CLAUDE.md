@@ -74,6 +74,7 @@ mastercard_dashboard/
 | `bogota-uso-10` | Bogotá Uso 10 | Davivienda | `dentsu_mastercard_bogota_uso_10` |
 | `davivienda-afluentes-3` | Afluentes 3 | Davivienda | `dentsu_mastercard_davivienda_afluentes_3` |
 | `pongalas-a-jugar` | Pónganlas a Jugar | Davivienda | `dentsu_mastercard_pongalas_a_jugar` |
+| `pongalas-a-jugar-2` | Pónganlas a Jugar 2 | Davivienda | `dentsu_mastercard_pongalas_a_jugar_2` |
 | `tuya-ola-5` | Tuya Ola 5 | Tuya | `dentsu_mastercard_tuya_ola_5` |
 | `tuya-ola-6` | Tuya Ola 6 | Tuya | `dentsu_mastercard_tuya_ola_6` |
 | `pacifico-sag-5` | Pacífico SAG 5 | Pacífico | `dentsu_mastercard_pacifico_sag_5` |

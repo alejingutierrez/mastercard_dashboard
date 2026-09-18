@@ -2386,8 +2386,13 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                               const cap = userTypeFilter
                                 ? userTypeFilter.charAt(0).toUpperCase() + userTypeFilter.slice(1)
                                 : null;
-                              const maxVal = cap && metricsByKey.has(`settingsMaxValue${cap}`)
-                                ? (metricsByKey.get(`settingsMaxValue${cap}`)?.value ?? null)
+                              // Pónganlas 2: multiproducto comparte bolsa con crédito,
+                              // así que el maxVal usa la key de crédito. El redimido
+                              // se mide aparte (solo lo que multi consumió).
+                              const maxCap =
+                                userTypeFilter === "multiproducto" ? "Credito" : cap;
+                              const maxVal = maxCap && metricsByKey.has(`settingsMaxValue${maxCap}`)
+                                ? (metricsByKey.get(`settingsMaxValue${maxCap}`)?.value ?? null)
                                 : (metricsByKey.get("settingsMaxValue")?.value ?? null);
                               const redeemed = cap && metricsByKey.has(`redeemedValue${cap}`)
                                 ? (metricsByKey.get(`redeemedValue${cap}`)?.value ?? null)

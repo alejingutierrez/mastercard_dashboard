@@ -523,6 +523,118 @@ const CAMPAIGNS = [
                 WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
                 LIMIT 50;`,
   },
+  {
+    // Segunda ola de Pónganlas a Jugar (Davivienda).
+    // Diferencias vs pongalas-a-jugar:
+    //   - Nuevo user_type "multiproducto" (146.924 usuarios) además de debito/credito.
+    //   - Para redenciones, multiproducto usa la misma bolsa que crédito
+    //     (budget_api_credito = 340M cubre credito + multiproducto).
+    //   - Base 2x más grande (3.644.802 usuarios).
+    id: "pongalas-a-jugar-2",
+    name: "Pónganlas a Jugar 2",
+    database: "dentsu_mastercard_pongalas_a_jugar_2",
+    bank: "davivienda",
+    baselineUsers: 3644802,
+    description:
+      "Segunda ola de Pónganlas a Jugar. Incluye segmento multiproducto (comparte bolsa de crédito).",
+    features: { cardType: true, segments: true, firstLoginsTable: true },
+    enrollmentGoals: [
+      { segment: "Débito",        userTypeValue: "debito",        target: 200000 },
+      { segment: "Crédito",       userTypeValue: "credito",       target: 10000 },
+      { segment: "Multiproducto", userTypeValue: "multiproducto", target: 50000 },
+    ],
+    metrics: [
+      ...COMMON_METRICS,
+      {
+        key: "inscribedDebito",
+        label: "Inscritos Débito",
+        sql: `SELECT COUNT(DISTINCT l.idmask) AS value
+              FROM {db}.mc_logins l
+              INNER JOIN {db}.mc_users u ON u.idmask = l.idmask
+              WHERE l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                AND l.type IN (1, 2)
+                AND u.user_type = 'debito';`,
+        baseTable: "mc_logins",
+        hidden: true,
+      },
+      {
+        key: "inscribedCredito",
+        label: "Inscritos Crédito",
+        sql: `SELECT COUNT(DISTINCT l.idmask) AS value
+              FROM {db}.mc_logins l
+              INNER JOIN {db}.mc_users u ON u.idmask = l.idmask
+              WHERE l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                AND l.type IN (1, 2)
+                AND u.user_type = 'credito';`,
+        baseTable: "mc_logins",
+        hidden: true,
+      },
+      {
+        // Nueva métrica oculta para el 3er chip del KPI "Usuarios Inscritos".
+        key: "inscribedMultiproducto",
+        label: "Inscritos Multiproducto",
+        sql: `SELECT COUNT(DISTINCT l.idmask) AS value
+              FROM {db}.mc_logins l
+              INNER JOIN {db}.mc_users u ON u.idmask = l.idmask
+              WHERE l.idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                AND l.type IN (1, 2)
+                AND u.user_type = 'multiproducto';`,
+        baseTable: "mc_logins",
+        hidden: true,
+      },
+      {
+        key: "redeemedValueDebito",
+        label: "Valor acumulado débito",
+        sql: `SELECT COALESCE(SUM(value), 0) AS value
+              FROM {db}.mc_redemptions
+              WHERE idmask IN (SELECT idmask FROM {db}.mc_users WHERE user_type = 'debito');`,
+        baseTable: "mc_redemptions",
+        hidden: true,
+      },
+      {
+        // Multiproducto redime contra la bolsa de crédito → suma acá.
+        key: "redeemedValueCredito",
+        label: "Valor acumulado crédito (incluye multiproducto)",
+        sql: `SELECT COALESCE(SUM(value), 0) AS value
+              FROM {db}.mc_redemptions
+              WHERE idmask IN (SELECT idmask FROM {db}.mc_users WHERE user_type IN ('credito', 'multiproducto'));`,
+        baseTable: "mc_redemptions",
+        hidden: true,
+      },
+      {
+        // Redimido solo por multiproducto (para "Valor disponible" cuando se filtra ese tipo).
+        key: "redeemedValueMultiproducto",
+        label: "Valor acumulado multiproducto",
+        sql: `SELECT COALESCE(SUM(value), 0) AS value
+              FROM {db}.mc_redemptions
+              WHERE idmask IN (SELECT idmask FROM {db}.mc_users WHERE user_type = 'multiproducto');`,
+        baseTable: "mc_redemptions",
+        hidden: true,
+      },
+      {
+        key: "settingsMaxValueDebito",
+        label: "Presupuesto débito",
+        sql: `SELECT COALESCE(CAST(value AS DECIMAL(20,2)), 0) AS value
+              FROM {db}.mc_settings WHERE \`key\` = 'budget_api_debito' LIMIT 1;`,
+        baseTable: "mc_settings",
+        hidden: true,
+      },
+      {
+        // Comparten bolsa credito+multiproducto (budget_api_credito = 340M).
+        key: "settingsMaxValueCredito",
+        label: "Presupuesto crédito (compartido con multiproducto)",
+        sql: `SELECT COALESCE(CAST(value AS DECIMAL(20,2)), 0) AS value
+              FROM {db}.mc_settings WHERE \`key\` = 'budget_api_credito' LIMIT 1;`,
+        baseTable: "mc_settings",
+        hidden: true,
+      },
+    ],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_amount_2, award_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
 ];
 
 // Campañas activas en el dashboard (filtra las que están en preparación
