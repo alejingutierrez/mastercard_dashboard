@@ -24,6 +24,11 @@ export interface Campaign {
   pendingDb?: boolean; // si true, la DB Aurora aún no existe — UI muestra banner
   hasUserType?: boolean; // false en AV Villas (mc_users.user_type no existe)
   hasReChallenge?: boolean; // true si la campaña tiene mc_tracings.is_Level_2 (AV Villas)
+  // Mapa opcional para renombrar valores crudos de mc_users.user_type en la UI.
+  // Ej. Guayaquil 5S 4: { "1": "Guayaquil", "2": "Paigo" }.
+  // Se aplica en el dropdown "Tipo de usuario", el filter pill y la columna
+  // tipo_usuario del export Excel. El valor enviado al backend sigue siendo el crudo.
+  userTypeLabels?: Record<string, string> | null;
 }
 
 export interface Metric {

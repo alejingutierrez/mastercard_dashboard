@@ -54,12 +54,13 @@ router.use((req, res, next) => {
 });
 
 router.get("/", (req, res) => {
-  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description, bank, userTypeColumn, firstLoginsPivotColumn, features, baselineUsers, enrollmentGoals, pendingDb, hasUserType, hasReChallenge }) => ({
+  const liteCampaigns = req.allowedCampaigns.map(({ id, name, description, bank, userTypeColumn, userTypeLabels, firstLoginsPivotColumn, features, baselineUsers, enrollmentGoals, pendingDb, hasUserType, hasReChallenge }) => ({
     id,
     name,
     description,
     bank: bank ?? null,
     userTypeColumn: userTypeColumn ?? null,
+    userTypeLabels: userTypeLabels ?? null,
     firstLoginsPivotColumn: firstLoginsPivotColumn ?? null,
     features: features ?? {},
     baselineUsers: baselineUsers ?? null,

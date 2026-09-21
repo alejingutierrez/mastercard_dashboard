@@ -84,6 +84,7 @@ mastercard_dashboard/
 | `avvillas-lista-para-ganar` | AV Villas Lista Para Ganar | AV Villas | `dentsu_mastercard_avvillas_lista_para_ganar` _(pendiente — `enabled: false` hasta que exista en Aurora)_ |
 | `pichincha` | Pichincha | Pichincha | `dentsu_mastercard_pichincha` |
 | `guayaquil-5step` | Guayaquil 5 Step | Guayaquil | `dentsu_mastercard_guayaquil_5step` |
+| `guayaquil-5s-4` | Guayaquil 5S 4 | Guayaquil | `dentsu_mastercard_guayaquil_5s_4` |
 
 ---
 

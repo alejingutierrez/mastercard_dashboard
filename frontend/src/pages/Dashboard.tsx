@@ -434,6 +434,17 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
 
   const isTuya = selectedCampaignBank === "tuya";
 
+  // Mapa opcional para renombrar valores crudos de user_type (ej. Guayaquil:
+  // "1" → "Guayaquil", "2" → "Paigo"). Si la campaña no lo define, devuelve
+  // el valor crudo.
+  const userTypeLabelMap = useMemo<Record<string, string>>(() => {
+    if (!selectedCampaign) return {};
+    return campaigns.find((c) => c.id === selectedCampaign)?.userTypeLabels ?? {};
+  }, [campaigns, selectedCampaign]);
+
+  const renderUserTypeLabel = (value: string): string =>
+    userTypeLabelMap[value] ?? value;
+
   // Campaña pre-aprovisionada cuya DB Aurora aún no existe.
   // Cuando el backend detecta el error "Unknown database", responde con
   // `pending: true` y aquí mostramos un banner amigable.
@@ -1284,7 +1295,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     if (userTypeFilter) {
       tags.push({
         key: "userType",
-        label: `Tipo: ${userTypeFilter}`,
+        label: `Tipo: ${renderUserTypeLabel(userTypeFilter)}`,
         onClose: () => setUserTypeFilter(undefined),
       });
     }
@@ -1326,6 +1337,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     loginType,
     loginTypeLabelMap,
     userTypeFilter,
+    userTypeLabelMap,
     segmentoFilter,
     userIdFilter,
     userIpFilter,
@@ -1645,7 +1657,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                   fecha_inscripcion: r.fecha_inscripcion,
                   segmento: r.segmento,
                 };
-                if (includeUserType) row.tipo_usuario = r.tipo_usuario;
+                if (includeUserType) row.tipo_usuario = renderUserTypeLabel(r.tipo_usuario);
                 // Conteos por type. total_intentos al final por convención.
                 row.logins_exitosos = r.logins_exitosos;
                 row.autologins = r.autologins;
@@ -1673,7 +1685,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                   comercio: r.comercio,
                   segmento: r.segmento,
                 };
-                if (includeUserType) row.tipo_usuario = r.tipo_usuario;
+                if (includeUserType) row.tipo_usuario = renderUserTypeLabel(r.tipo_usuario);
                 return row;
               }) as Record<string, unknown>[],
             });
@@ -1749,7 +1761,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                   comercio: r.comercio,
                   segmento: r.segmento,
                 };
-                if (includeUserType) row.tipo_usuario = r.tipo_usuario;
+                if (includeUserType) row.tipo_usuario = renderUserTypeLabel(r.tipo_usuario);
                 return row;
               }) as Record<string, unknown>[],
             });
@@ -2256,7 +2268,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                           placeholder="Todos los tipos"
                           style={{ width: "100%" }}
                           value={userTypeFilter ?? undefined}
-                          options={userTypeOptions.map((v) => ({ value: v, label: v }))}
+                          options={userTypeOptions.map((v) => ({ value: v, label: renderUserTypeLabel(v) }))}
                           onChange={(value) => setUserTypeFilter(value ?? undefined)}
                           notFoundContent="Sin opciones para esta campaña"
                         />

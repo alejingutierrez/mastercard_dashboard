@@ -326,6 +326,35 @@ const CAMPAIGNS = [
                 LIMIT 50;`,
   },
   {
+    // Cuarta ola de Guayaquil 5 Step. Campaña compartida entre Banco de
+    // Guayaquil y Paigo — separación de reportes vía user_type:
+    //   user_type = 1  → cliente Banco de Guayaquil (76% de la base)
+    //   user_type = 2  → cliente Paigo (24% de la base)
+    // `userTypeLabels` mapea los valores crudos a etiquetas legibles en
+    // dropdowns, pills y columna tipo_usuario del export Excel.
+    //
+    // Otras notas: segment también es numérico (0/1). blocks=1 (solo Win 1).
+    // use_dollars=1 → montos en USD.
+    id: "guayaquil-5s-4",
+    name: "Guayaquil 5S 4",
+    database: "dentsu_mastercard_guayaquil_5s_4",
+    bank: "guayaquil",
+    baselineUsers: 1823483,
+    description:
+      "Cuarta ola de Guayaquil 5 Step (Banco de Guayaquil + Paigo). Montos en USD.",
+    features: { cardType: true }, // habilita filtro "Tipo de usuario"
+    userTypeLabels: {
+      "1": "Guayaquil",
+      "2": "Paigo",
+    },
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, goal_amount_2, award_1, award_2
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
+  {
     id: "tuya-ola-5",
     name: "Tuya Ola 5",
     database: "dentsu_mastercard_tuya_ola_5",

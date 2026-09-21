@@ -921,6 +921,13 @@ export const createUserColumns = ({
     title: "Usuario",
     dataIndex: "name",
     key: "name",
+    // Sorter por nombre (fallback a email si el nombre está vacío) —
+    // permite ordenar la tabla asc/desc con click en el header.
+    sorter: (a, b) =>
+      (a.name || a.email || "").localeCompare(b.name || b.email || "", "es", {
+        sensitivity: "base",
+      }),
+    defaultSortOrder: "ascend" as const,
     render: (_: string, record) => (
       <Space direction="vertical" size={0}>
         <Text strong>{record.name || record.email}</Text>
