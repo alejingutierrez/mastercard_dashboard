@@ -435,7 +435,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
   const isTuya = selectedCampaignBank === "tuya";
 
   // Mapa opcional para renombrar valores crudos de user_type (ej. Guayaquil:
-  // "1" → "Guayaquil", "2" → "Paigo"). Si la campaña no lo define, devuelve
+  // "1" → "Guayaquil", "2" → "PeiGo"). Si la campaña no lo define, devuelve
   // el valor crudo.
   const userTypeLabelMap = useMemo<Record<string, string>>(() => {
     if (!selectedCampaign) return {};

@@ -327,9 +327,9 @@ const CAMPAIGNS = [
   },
   {
     // Cuarta ola de Guayaquil 5 Step. Campaña compartida entre Banco de
-    // Guayaquil y Paigo — separación de reportes vía user_type:
+    // Guayaquil y PeiGo — separación de reportes vía user_type:
     //   user_type = 1  → cliente Banco de Guayaquil (76% de la base)
-    //   user_type = 2  → cliente Paigo (24% de la base)
+    //   user_type = 2  → cliente PeiGo (24% de la base)
     // `userTypeLabels` mapea los valores crudos a etiquetas legibles en
     // dropdowns, pills y columna tipo_usuario del export Excel.
     //
@@ -341,11 +341,11 @@ const CAMPAIGNS = [
     bank: "guayaquil",
     baselineUsers: 1823483,
     description:
-      "Cuarta ola de Guayaquil 5 Step (Banco de Guayaquil + Paigo). Montos en USD.",
+      "Cuarta ola de Guayaquil 5 Step (Banco de Guayaquil + PeiGo). Montos en USD.",
     features: { cardType: true }, // habilita filtro "Tipo de usuario"
     userTypeLabels: {
       "1": "Guayaquil",
-      "2": "Paigo",
+      "2": "PeiGo",
     },
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],

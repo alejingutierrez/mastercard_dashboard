@@ -25,7 +25,7 @@ export interface Campaign {
   hasUserType?: boolean; // false en AV Villas (mc_users.user_type no existe)
   hasReChallenge?: boolean; // true si la campaña tiene mc_tracings.is_Level_2 (AV Villas)
   // Mapa opcional para renombrar valores crudos de mc_users.user_type en la UI.
-  // Ej. Guayaquil 5S 4: { "1": "Guayaquil", "2": "Paigo" }.
+  // Ej. Guayaquil 5S 4: { "1": "Guayaquil", "2": "PeiGo" }.
   // Se aplica en el dropdown "Tipo de usuario", el filter pill y la columna
   // tipo_usuario del export Excel. El valor enviado al backend sigue siendo el crudo.
   userTypeLabels?: Record<string, string> | null;
