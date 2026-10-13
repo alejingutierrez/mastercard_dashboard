@@ -422,6 +422,29 @@ const CAMPAIGNS = [
                 LIMIT 50;`,
   },
   {
+    // Octava ola de Pacífico 5 Step. Lanzada 2026-09-29, activa hoy.
+    // user_type NULL en toda la base (281.400 usuarios) → no maneja débito/crédito
+    // (hasUserType:false, igual que AV Villas → omite columna en exports y filtros).
+    // Segmentos: Grupo 1..4 (nuevo formato de segmentación).
+    // blocks=1 (solo Win 1), use_dollars=1 (montos en USD).
+    // budget_api=0 (pendiente definir), budget_prepurchased=10000.
+    id: "pacifico-5s-8",
+    name: "Pacífico 5S Ola 8",
+    database: "dentsu_mastercard_pacifico_5s_8",
+    bank: "pacifico",
+    baselineUsers: 281400,
+    hasUserType: false,
+    description:
+      "Octava ola de Pacífico 5 Step. Segmentación por grupos (sin tipo débito/crédito). Montos en USD.",
+    features: {},
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, goal_amount_1, award_1, goal_category_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
+  {
     id: "avvillas-combo-playero",
     name: "AV Villas Combo Playero",
     database: "dentsu_mastercard_avvillas_combo_playero",

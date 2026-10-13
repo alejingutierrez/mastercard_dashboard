@@ -80,6 +80,7 @@ mastercard_dashboard/
 | `pacifico-sag-5` | Pacífico SAG 5 | Pacífico | `dentsu_mastercard_pacifico_sag_5` |
 | `pacifico-5s-4` | Pacífico 5S 4 | Pacífico | `dentsu_mastercard_pacifico_5s_4` |
 | `pacifico-5s-7` | Pacífico 5S 7 (OLA 7) | Pacífico | `dentsu_mastercard_pacifico_5s_7` |
+| `pacifico-5s-8` | Pacífico 5S Ola 8 | Pacífico | `dentsu_mastercard_pacifico_5s_8` (hasUserType:false, 4 grupos, USD) |
 | `avvillas-combo-playero` | AV Villas Combo Playero | AV Villas | `dentsu_mastercard_avvillas_combo_playero` |
 | `avvillas-lista-para-ganar` | AV Villas Lista Para Ganar | AV Villas | `dentsu_mastercard_avvillas_lista_para_ganar` _(pendiente — `enabled: false` hasta que exista en Aurora)_ |
 | `pichincha` | Pichincha | Pichincha | `dentsu_mastercard_pichincha` |
