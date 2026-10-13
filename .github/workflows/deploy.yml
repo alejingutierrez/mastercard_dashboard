@@ -19,7 +19,11 @@ env:
 jobs:
   deploy:
     name: Deploy frontend and backend
-    runs-on: ubuntu-latest
+    # Native arm64 runner — gratis para repos públicos (desde ene 2025).
+    # Evita QEMU/emulación en el build del backend (que corre en arm64 en ECS Fargate)
+    # y elimina los crashes esporádicos "qemu: uncaught target signal 4
+    # (Illegal instruction)" que colgaban el build 10+ min antes de petar.
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       actions: write
@@ -63,8 +67,8 @@ jobs:
         id: image
         run: echo "tag=backend-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      # Set up QEMU eliminado — ya no se necesita emulación porque el runner
+      # es arm64 nativo (ubuntu-24.04-arm).
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
