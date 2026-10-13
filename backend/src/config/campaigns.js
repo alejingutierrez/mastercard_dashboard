@@ -115,12 +115,23 @@ const COMMON_METRICS = [
     baseTable: "mc_redemptions",
   },
   {
+    // Presupuesto máximo global. Preferimos `budget_api` (presupuesto de redención
+    // "en línea"), pero algunas campañas de bonos predescargados tienen
+    // budget_api = 0 y el presupuesto real vive en `budget_prepurchased`
+    // (caso Pacífico 5S 7, 5S 8). El COALESCE devuelve el primer valor > 0:
+    //   1º budget_api si existe y > 0
+    //   2º budget_prepurchased si existe y > 0
+    //   3º 0 (fallback)
+    // Backward-compat con todas las demás campañas (que ya tienen budget_api > 0).
     key: "settingsMaxValue",
     label: "Presupuesto Máximo",
-    sql: `SELECT COALESCE(CAST(value AS DECIMAL(20,2)), 0) AS value
-          FROM {db}.mc_settings
-          WHERE \`key\` = 'budget_api'
-          LIMIT 1;`,
+    sql: `SELECT COALESCE(
+            (SELECT CAST(value AS DECIMAL(20,2)) FROM {db}.mc_settings
+             WHERE \`key\` = 'budget_api' AND CAST(value AS DECIMAL(20,2)) > 0 LIMIT 1),
+            (SELECT CAST(value AS DECIMAL(20,2)) FROM {db}.mc_settings
+             WHERE \`key\` = 'budget_prepurchased' AND CAST(value AS DECIMAL(20,2)) > 0 LIMIT 1),
+            0
+          ) AS value;`,
     baseTable: "mc_settings",
     hidden: true,
   },
@@ -406,17 +417,23 @@ const CAMPAIGNS = [
                 LIMIT 50;`,
   },
   {
+    // Séptima ola de Pacífico 5 Step. Mismo esquema que 5S 8:
+    // user_type NULL en toda la base (hasUserType:false), segmentos por grupos,
+    // budget_prepurchased como presupuesto real (budget_api=0).
+    // El KPI "Presupuesto Máximo" ahora cae automáticamente a budget_prepurchased
+    // via COALESCE en la métrica settingsMaxValue.
     id: "pacifico-5s-7",
     name: "Pacífico 5S 7",
     database: "dentsu_mastercard_pacifico_5s_7",
     bank: "pacifico",
     baselineUsers: null,
+    hasUserType: false,
     description:
-      "Campaña Banco del Pacífico 5Steps - OLA 7. Sigue las mismas métricas agregadas del resto del dashboard.",
+      "Campaña Banco del Pacífico 5Steps - OLA 7. Segmentación por grupos (sin tipo débito/crédito). Montos en USD.",
     features: {},
     metrics: [...COMMON_METRICS],
     charts: [...COMMON_CHARTS],
-    sampleSql: `SELECT idmask, segment, user_type, goal_amount_1, award_1, challenge_1
+    sampleSql: `SELECT idmask, segment, goal_amount_1, award_1, challenge_1
                 FROM {db}.mc_users
                 WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
                 LIMIT 50;`,
