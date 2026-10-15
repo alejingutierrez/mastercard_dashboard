@@ -946,6 +946,10 @@ export const createUserColumns = ({
     dataIndex: "allowedCampaignIds",
     key: "allowedCampaignIds",
     render: (_: unknown, record) => {
+      // "Todas" si tiene el flag grantAllCampaigns o si su lista literal cubre todas.
+      if (record.grantAllCampaigns === true) {
+        return <Tag color="blue">Todas</Tag>;
+      }
       const allowed = record.allowedCampaignIds ?? [];
       if (allowed.length === 0) {
         return <Tag color="volcano">Sin acceso</Tag>;

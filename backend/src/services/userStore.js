@@ -35,22 +35,46 @@ const normalizeAllowedCampaignIds = (values) => {
 };
 
 const applyUserDefaults = (user) => {
-  const normalizedAllowed = normalizeAllowedCampaignIds(user.allowedCampaignIds);
-  const desiredAllowed =
-    normalizedAllowed && normalizedAllowed.length > 0
-      ? normalizedAllowed
-      : ALL_CAMPAIGN_IDS;
-  const currentAllowed = Array.isArray(user.allowedCampaignIds)
+  // Auto-migración: si el user ya tiene el flag o si su allowedCampaignIds
+  // cubre TODAS las campañas activas, lo marcamos con grantAllCampaigns:true
+  // y vaciamos la lista. Así se auto-sincroniza con futuras campañas sin
+  // que haya que tocar el JSON manualmente.
+  const currentAllowedRaw = Array.isArray(user.allowedCampaignIds)
     ? user.allowedCampaignIds
     : [];
-  const allowedMatches =
-    currentAllowed.length === desiredAllowed.length &&
-    currentAllowed.every((value, index) => value === desiredAllowed[index]);
+  const alreadyGrantsAll = user.grantAllCampaigns === true;
+  const coversAll =
+    currentAllowedRaw.length === ALL_CAMPAIGN_IDS.length &&
+    ALL_CAMPAIGN_IDS.every((id) => currentAllowedRaw.includes(id));
 
   const mustResetPassword =
     typeof user.mustResetPassword === "boolean"
       ? user.mustResetPassword
       : false;
+
+  if (alreadyGrantsAll || coversAll) {
+    const needsFlag = user.grantAllCampaigns !== true;
+    const needsEmpty = currentAllowedRaw.length !== 0;
+    const needsResetBool = mustResetPassword !== user.mustResetPassword;
+    if (!needsFlag && !needsEmpty && !needsResetBool) {
+      return user;
+    }
+    return {
+      ...user,
+      grantAllCampaigns: true,
+      allowedCampaignIds: [],
+      mustResetPassword,
+    };
+  }
+
+  const normalizedAllowed = normalizeAllowedCampaignIds(user.allowedCampaignIds);
+  const desiredAllowed =
+    normalizedAllowed && normalizedAllowed.length > 0
+      ? normalizedAllowed
+      : ALL_CAMPAIGN_IDS;
+  const allowedMatches =
+    currentAllowedRaw.length === desiredAllowed.length &&
+    currentAllowedRaw.every((value, index) => value === desiredAllowed[index]);
 
   if (allowedMatches && mustResetPassword === user.mustResetPassword) {
     return user;
@@ -59,7 +83,7 @@ const applyUserDefaults = (user) => {
   return {
     ...user,
     allowedCampaignIds: allowedMatches
-      ? currentAllowed
+      ? currentAllowedRaw
       : desiredAllowed.slice(),
     mustResetPassword,
   };
@@ -74,6 +98,7 @@ const sanitizeUser = (user) => {
     emailNormalized,
     allowedCampaignIds,
     mustResetPassword,
+    grantAllCampaigns,
     ...rest
   } = user;
   const normalizedAllowed = normalizeAllowedCampaignIds(allowedCampaignIds);
@@ -85,6 +110,7 @@ const sanitizeUser = (user) => {
     ...rest,
     allowedCampaignIds: normalizedAllowedCampaignIds,
     mustResetPassword: Boolean(mustResetPassword),
+    grantAllCampaigns: Boolean(grantAllCampaigns),
   };
 };
 
@@ -257,6 +283,7 @@ const createUser = async ({
   role,
   password,
   allowedCampaignIds,
+  grantAllCampaigns,
   forcePasswordReset,
 }) => {
   const normalizedEmail = normalizeEmail(email);
@@ -273,11 +300,16 @@ const createUser = async ({
     throw new Error("Ya existe un usuario con ese correo electrónico");
   }
 
+  const grantAll = grantAllCampaigns === true;
   const requestedCampaignIds = normalizeAllowedCampaignIds(allowedCampaignIds);
-  if (allowedCampaignIds !== undefined && !requestedCampaignIds) {
+  // Con grantAll la lista explícita puede ser vacía — se resuelve dinámicamente
+  // en runtime a todas las campañas activas (ver middleware en routes/campaigns.js).
+  if (!grantAll && allowedCampaignIds !== undefined && !requestedCampaignIds) {
     throw new Error("Debes asignar al menos una campaña válida.");
   }
-  const campaignIds = requestedCampaignIds
+  const campaignIds = grantAll
+    ? []
+    : requestedCampaignIds
     ? requestedCampaignIds.slice()
     : ALL_CAMPAIGN_IDS.slice();
 
@@ -294,6 +326,7 @@ const createUser = async ({
     createdAt: timestamp,
     updatedAt: timestamp,
     allowedCampaignIds: campaignIds,
+    grantAllCampaigns: grantAll,
     mustResetPassword: Boolean(
       forcePasswordReset === undefined ? true : forcePasswordReset
     ),
@@ -306,7 +339,7 @@ const createUser = async ({
 
 const updateUser = async (
   id,
-  { name, role, password, allowedCampaignIds, forcePasswordReset }
+  { name, role, password, allowedCampaignIds, grantAllCampaigns, forcePasswordReset }
 ) => {
   const users = await readUsersFile();
   const index = users.findIndex(
@@ -323,7 +356,25 @@ const updateUser = async (
   const user = { ...baseUser };
   let modified = false;
 
-  if (allowedCampaignIds !== undefined) {
+  // Flag "todas las campañas" — si cambia, actualiza. Si está true,
+  // allowedCampaignIds puede quedar vacía (se resuelve dinámico en runtime).
+  if (grantAllCampaigns !== undefined) {
+    const next = grantAllCampaigns === true;
+    if (user.grantAllCampaigns !== next) {
+      user.grantAllCampaigns = next;
+      modified = true;
+    }
+    if (next) {
+      // No necesitamos lista explícita. La vaciamos para no mantenerla
+      // artificialmente sincronizada con cada nueva campaña.
+      if ((user.allowedCampaignIds || []).length !== 0) {
+        user.allowedCampaignIds = [];
+        modified = true;
+      }
+    }
+  }
+
+  if (allowedCampaignIds !== undefined && user.grantAllCampaigns !== true) {
     const normalizedAllowed = normalizeAllowedCampaignIds(allowedCampaignIds);
     if (!normalizedAllowed) {
       throw new Error("Debes asignar al menos una campaña válida.");

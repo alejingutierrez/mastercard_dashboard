@@ -30,6 +30,7 @@ router.post("/", async (req, res) => {
       role,
       password,
       allowedCampaignIds,
+      grantAllCampaigns,
       forcePasswordReset,
     } = req.body || {};
     if (!email || !password) {
@@ -44,6 +45,7 @@ router.post("/", async (req, res) => {
       role,
       password,
       allowedCampaignIds,
+      grantAllCampaigns,
       forcePasswordReset,
     });
     res.status(201).json({ user });
@@ -63,6 +65,7 @@ router.put("/:id", async (req, res) => {
       role,
       password,
       allowedCampaignIds,
+      grantAllCampaigns,
       forcePasswordReset,
     } = req.body || {};
 
@@ -90,6 +93,7 @@ router.put("/:id", async (req, res) => {
       role,
       password,
       allowedCampaignIds,
+      grantAllCampaigns,
       forcePasswordReset,
     });
     res.json({ user });

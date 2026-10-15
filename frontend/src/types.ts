@@ -241,6 +241,10 @@ export interface DashboardUser {
   updatedAt: string;
   allowedCampaignIds: string[];
   mustResetPassword: boolean;
+  // Si true, el usuario ve todas las campañas activas (se resuelve en runtime).
+  // Al agregar una campaña nueva, estos usuarios la ven sin tener que
+  // actualizar su allowedCampaignIds. allowedCampaignIds queda vacío en DB.
+  grantAllCampaigns?: boolean;
 }
 
 export interface AuthResponse {

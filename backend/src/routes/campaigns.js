@@ -30,9 +30,12 @@ router.use(requireAuth);
 router.use((req, res, next) => {
   // Los admin siempre ven todas las campañas, sin importar su allowedCampaignIds
   // en S3 — así no hay que tocar S3 cada vez que se agregue una nueva campaña.
+  // Los viewers con `grantAllCampaigns: true` también se auto-sincronizan con
+  // CAMPAIGNS cada deploy (no se les mantiene lista explícita, menos trabajo).
   const isAdmin = req.user?.role === "admin";
+  const grantAll = req.user?.grantAllCampaigns === true;
 
-  const rawAllowed = isAdmin
+  const rawAllowed = (isAdmin || grantAll)
     ? CAMPAIGNS.map(({ id }) => id)
     : Array.isArray(req.user?.allowedCampaignIds) &&
       req.user.allowedCampaignIds.length > 0

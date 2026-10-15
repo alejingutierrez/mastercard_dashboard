@@ -86,6 +86,7 @@ mastercard_dashboard/
 | `pichincha` | Pichincha | Pichincha | `dentsu_mastercard_pichincha` |
 | `guayaquil-5step` | Guayaquil 5 Step | Guayaquil | `dentsu_mastercard_guayaquil_5step` |
 | `guayaquil-5s-4` | Guayaquil 5S 4 | Guayaquil | `dentsu_mastercard_guayaquil_5s_4` |
+| `popular-estrene-upgrade` | Ganar es Popular | Popular | `dentsu_mastercard_popular_estrene_upgrade` (hasUserType:false, 6 segmentos, COP) |
 
 ---
 

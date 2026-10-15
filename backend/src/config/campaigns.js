@@ -704,6 +704,28 @@ const CAMPAIGNS = [
                 WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
                 LIMIT 50;`,
   },
+  {
+    // Banco Popular (Colombia) - "Ganar es Popular". Lanzada ~2026-10-15, activa.
+    // 46.348 usuarios, user_type NULL (hasUserType:false; sólo 3 residuales no-null).
+    // Segmentos naturales en español: Inactivos, Habituales, Ligeros, Clientes
+    // premium, Nuevos, Premium. Mecánica: 1 meta + 1 redención.
+    // blocks=1 (solo Win 1), presupuesto 68.544.000 COP (sin use_dollars).
+    id: "popular-estrene-upgrade",
+    name: "Ganar es Popular",
+    database: "dentsu_mastercard_popular_estrene_upgrade",
+    bank: "popular",
+    baselineUsers: 46348,
+    hasUserType: false,
+    description:
+      "Campaña Banco Popular - Ganar es Popular. Segmentación por comportamiento de cliente (Inactivos, Habituales, Ligeros, Clientes premium, Nuevos, Premium).",
+    features: {},
+    metrics: [...COMMON_METRICS],
+    charts: [...COMMON_CHARTS],
+    sampleSql: `SELECT idmask, segment, goal_amount_1, award_1
+                FROM {db}.mc_users
+                WHERE idmask IS NULL OR idmask NOT IN ${EXCLUDED_IDMASKS_SQL}
+                LIMIT 50;`,
+  },
 ];
 
 // Campañas activas en el dashboard (filtra las que están en preparación

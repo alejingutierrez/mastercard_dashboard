@@ -9,25 +9,9 @@
     "passwordHash": "$2a$10$8vpKY2ta.McWnvzkpzWEausxi.60CjRk0rIFwaVg2x2YeKlt..xQe",
     "createdAt": "2025-10-21T19:22:00.347Z",
     "updatedAt": "2026-04-16T20:59:28.948Z",
-    "allowedCampaignIds": [
-      "debitazo-5",
-      "bogota-uso-10",
-      "debitazo-6",
-      "davivienda-afluentes-3",
-      "pacifico-sag-5",
-      "pichincha",
-      "tuya-ola-5",
-      "tuya-ola-6",
-      "pacifico-5s-4",
-      "pacifico-5s-7",
-      "pacifico-5s-8",
-      "avvillas-combo-playero",
-      "avvillas-lista-para-ganar",
-      "pongalas-a-jugar",
-      "pongalas-a-jugar-2",
-      "guayaquil-5s-4"
-    ],
-    "mustResetPassword": false
+    "allowedCampaignIds": [],
+    "mustResetPassword": false,
+    "grantAllCampaigns": true
   },
   {
     "id": "c0947cdd-07dd-4945-832b-a5de7b2b404a",
@@ -39,25 +23,9 @@
     "passwordHash": "$2a$10$8blF1VFbAauaO2pEya4a6.tONpn76H7LbAAmzC18wJkOSQXKmzkrK",
     "createdAt": "2025-10-22T00:49:26.453Z",
     "updatedAt": "2025-10-22T00:50:01.277Z",
-    "allowedCampaignIds": [
-      "debitazo-5",
-      "bogota-uso-10",
-      "debitazo-6",
-      "davivienda-afluentes-3",
-      "pacifico-sag-5",
-      "pichincha",
-      "tuya-ola-5",
-      "tuya-ola-6",
-      "pacifico-5s-4",
-      "pacifico-5s-7",
-      "pacifico-5s-8",
-      "avvillas-combo-playero",
-      "avvillas-lista-para-ganar",
-      "pongalas-a-jugar",
-      "pongalas-a-jugar-2",
-      "guayaquil-5s-4"
-    ],
-    "mustResetPassword": false
+    "allowedCampaignIds": [],
+    "mustResetPassword": false,
+    "grantAllCampaigns": true
   },
   {
     "id": "98d6a6e4-8a1d-4a2e-b9f4-5e4b677214f9",
@@ -69,24 +37,8 @@
     "passwordHash": "$2a$10$53tpzrlt3huZN2XnShqe8.Bg3bCUlAXy8Je7p6EHxGFNXb1O83WxC",
     "createdAt": "2025-10-23T00:07:52.272Z",
     "updatedAt": "2025-10-23T00:08:18.658Z",
-    "allowedCampaignIds": [
-      "debitazo-5",
-      "bogota-uso-10",
-      "debitazo-6",
-      "davivienda-afluentes-3",
-      "pacifico-sag-5",
-      "pichincha",
-      "tuya-ola-5",
-      "tuya-ola-6",
-      "pacifico-5s-4",
-      "pacifico-5s-7",
-      "pacifico-5s-8",
-      "avvillas-combo-playero",
-      "avvillas-lista-para-ganar",
-      "pongalas-a-jugar",
-      "pongalas-a-jugar-2",
-      "guayaquil-5s-4"
-    ],
-    "mustResetPassword": false
+    "allowedCampaignIds": [],
+    "mustResetPassword": false,
+    "grantAllCampaigns": true
   }
 ]

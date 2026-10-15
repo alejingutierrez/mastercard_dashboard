@@ -7,6 +7,7 @@ export interface CreateUserPayload {
   role: "admin" | "viewer";
   password: string;
   allowedCampaignIds?: string[];
+  grantAllCampaigns?: boolean;
   forcePasswordReset?: boolean;
 }
 
@@ -15,6 +16,7 @@ export interface UpdateUserPayload {
   role?: "admin" | "viewer";
   password?: string;
   allowedCampaignIds?: string[];
+  grantAllCampaigns?: boolean;
   forcePasswordReset?: boolean;
 }
 

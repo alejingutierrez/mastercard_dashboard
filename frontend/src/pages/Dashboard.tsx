@@ -4,6 +4,7 @@ import {
   Avatar,
   Button,
   Card,
+  Checkbox,
   Col,
   DatePicker,
   Drawer,
@@ -126,6 +127,7 @@ interface UserFormValues {
   role: "admin" | "viewer";
   password?: string;
   allowedCampaignIds?: string[];
+  grantAllCampaigns?: boolean;
   forcePasswordReset?: boolean;
 }
 
@@ -554,16 +556,9 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
     }
   }, [mustChangePassword, profileModalVisible, openProfileModal]);
 
-  useEffect(() => {
-    if (!userModalVisible) {
-      return;
-    }
-    if (!editingUser) {
-      userForm.setFieldsValue({
-        allowedCampaignIds: allCampaignIds,
-      });
-    }
-  }, [userModalVisible, editingUser, allCampaignIds, userForm]);
+  // Nota: eliminado el autollenado de allowedCampaignIds con todas las campañas
+  // al abrir el modal de crear. Ahora el usuario arranca sin selección; si quiere
+  // "acceso total" marca el checkbox "Todas las campañas" (grantAllCampaigns).
 
   const loadUsersList = useCallback(async () => {
     setUsersError(undefined);
@@ -586,7 +581,8 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
       name: "",
       role: "viewer",
       password: "",
-      allowedCampaignIds: allCampaignIds,
+      allowedCampaignIds: [], // sin preselección — el usuario escoge o marca "Todas"
+      grantAllCampaigns: false,
       forcePasswordReset: true,
     });
     setUserModalVisible(true);
@@ -594,35 +590,41 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
 
   const handleOpenEditUser = useCallback((user: DashboardUser) => {
     setEditingUser(user);
+    const hasAll = user.grantAllCampaigns === true;
     userForm.setFieldsValue({
       email: user.email,
       name: user.name,
       role: user.role,
       password: "",
-      allowedCampaignIds:
-        user.allowedCampaignIds && user.allowedCampaignIds.length > 0
-          ? user.allowedCampaignIds
-          : allCampaignIds,
+      grantAllCampaigns: hasAll,
+      allowedCampaignIds: hasAll ? [] : (user.allowedCampaignIds || []),
       forcePasswordReset: user.mustResetPassword ?? false,
     });
     setUserModalVisible(true);
-  }, [userForm, allCampaignIds]);
+  }, [userForm]);
 
   const handleSubmitUser = async () => {
     try {
       const values = await userForm.validateFields();
       setUserModalSubmitting(true);
-      const allowedCampaignIds =
-        values.allowedCampaignIds && values.allowedCampaignIds.length > 0
-          ? values.allowedCampaignIds
-          : allCampaignIds;
-      const normalizedAllowed = Array.from(new Set(allowedCampaignIds));
+      const grantAll = values.grantAllCampaigns === true;
+      // Si "Todas las campañas" está activo, el backend resuelve en runtime —
+      // no mandamos la lista explícita (queda vacía en DB).
+      const normalizedAllowed = grantAll
+        ? []
+        : Array.from(new Set(values.allowedCampaignIds || []));
+      if (!grantAll && normalizedAllowed.length === 0) {
+        message.error("Selecciona al menos una campaña o marca \"Todas las campañas\".");
+        setUserModalSubmitting(false);
+        return;
+      }
       if (editingUser) {
         const payload = {
           name: values.name,
           role: values.role,
           ...(values.password ? { password: values.password } : {}),
           allowedCampaignIds: normalizedAllowed,
+          grantAllCampaigns: grantAll,
           forcePasswordReset: values.forcePasswordReset,
         };
         const updatedUser = await updateUser(editingUser.id, payload);
@@ -640,6 +642,7 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
           role: values.role,
           password: values.password!,
           allowedCampaignIds: normalizedAllowed,
+          grantAllCampaigns: grantAll,
           forcePasswordReset:
             values.forcePasswordReset === undefined
               ? true
@@ -2847,33 +2850,56 @@ const Dashboard = ({ currentUser, onLogout, onUserUpdate }: DashboardProps) => {
                   />
                 </Form.Item>
                 <Form.Item
-                  label="Campañas habilitadas"
-                  name="allowedCampaignIds"
-                  rules={[
-                    {
-                      validator: (_rule, value?: string[]) => {
-                        if (totalCampaignCount === 0) {
-                          return Promise.resolve();
-                        }
-                        if (!value || value.length === 0) {
-                          return Promise.reject(
-                            new Error("Selecciona al menos una campaña"),
-                          );
-                        }
-                        return Promise.resolve();
-                      },
-                    },
-                  ]}
+                  name="grantAllCampaigns"
+                  valuePropName="checked"
+                  style={{ marginBottom: 4 }}
                 >
-                  <Select
-                    mode="multiple"
-                    placeholder="Selecciona las campañas"
-                    options={userCampaignOptions}
-                    optionFilterProp="label"
-                    loading={loadingCampaigns}
-                    disabled={loadingCampaigns}
-                    maxTagCount="responsive"
-                  />
+                  <Checkbox>
+                    Todas las campañas
+                    <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                      — se auto-sincroniza cuando se agregan campañas nuevas
+                    </Text>
+                  </Checkbox>
+                </Form.Item>
+                <Form.Item
+                  noStyle
+                  shouldUpdate={(prev, cur) => prev.grantAllCampaigns !== cur.grantAllCampaigns}
+                >
+                  {({ getFieldValue }) => {
+                    const grantAll = getFieldValue("grantAllCampaigns") === true;
+                    return (
+                      <Form.Item
+                        label="Campañas habilitadas"
+                        name="allowedCampaignIds"
+                        rules={[
+                          {
+                            validator: (_rule, value?: string[]) => {
+                              if (totalCampaignCount === 0 || grantAll) {
+                                return Promise.resolve();
+                              }
+                              if (!value || value.length === 0) {
+                                return Promise.reject(
+                                  new Error("Selecciona al menos una campaña o marca \"Todas las campañas\""),
+                                );
+                              }
+                              return Promise.resolve();
+                            },
+                          },
+                        ]}
+                        extra={grantAll ? "Deshabilitado: este usuario tiene acceso a todas las campañas." : undefined}
+                      >
+                        <Select
+                          mode="multiple"
+                          placeholder={grantAll ? "Todas (automático)" : "Selecciona las campañas"}
+                          options={userCampaignOptions}
+                          optionFilterProp="label"
+                          loading={loadingCampaigns}
+                          disabled={loadingCampaigns || grantAll}
+                          maxTagCount="responsive"
+                        />
+                      </Form.Item>
+                    );
+                  }}
                 </Form.Item>
                 <Form.Item
                   label="Contraseña"
